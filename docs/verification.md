@@ -124,14 +124,16 @@ python3 syn/run_synth.py --strict      # real generic-cell synthesis
 python3 run_gatelevel.py --strict      # 5 netlists replayed
 ```
 
-Any skipped step fails the job. Run `43226906536` (commit `a8639b0`) executed
-all six testbenches: all six printed `RESULT ... PASS` and the independent
-scoreboard reported 0 mismatches on all six dumps (88,048 points in total).
-The first run (`43226072305`) failed for the protocol reason described in
-section 1; the fix was in the checker, not in the RTL. Later runs added
-synthesis and gate-level replay; two further CI failures (netlist hierarchy /
-parameter overrides, and gate-replay simulation cost) were fixed from the real
-logs. All run IDs, commit hashes and logs are in
+Any skipped step fails the job. The latest green run `43238295802` (commit
+`1399057`) executed all three `--strict` steps: six testbenches all printed
+`RESULT ... PASS` with 0 scoreboard mismatches on all six dumps (88,048
+points), six tops synthesised with 0 latches, and **5/5 flattened netlists
+replayed bit-exactly** (per-TB points and all five checks in
+`results/gatelevel_report.md`). The first run (`43226072305`) failed for the
+protocol reason described in section 1; the fix was in the checker, not in the
+RTL. Two further CI failures (netlist hierarchy / parameter overrides, and
+gate-replay simulation cost) were fixed from the real logs. All run IDs,
+commit hashes, cell counts and logs are in
 [`results/ci_evidence.md`](../results/ci_evidence.md).
 
 ---

@@ -34,7 +34,7 @@ Read this first. "Done" always points at a file you can open.
 | 6 self-checking testbenches | **PASS, 6/6** in real simulation (Icarus Verilog 12.0) | [`results/ci_evidence.md`](results/ci_evidence.md) |
 | Real logic-level synthesis | **Done** — Yosys 0.70, 6 flattened tops, 0 latches, 0 connectivity problems. **Generic cells only: no PDK, no PPA** | [`results/synthesis_report.md`](results/synthesis_report.md) |
 | Post-synthesis gate-level replay | **Done** — 5 netlists, RTL-vs-netlist bit-exact on a boundary subset | [`results/gatelevel_report.md`](results/gatelevel_report.md) |
-| CI regression on Linux | **Green** — 3 mandatory `--strict` steps (regress / synthesis / gate-level) | [`results/ci_evidence.md`](results/ci_evidence.md), `.github/workflows/ci.yml` |
+| CI regression on Linux | **Green** — run `43238295802`, 3 mandatory `--strict` steps (regress / synthesis / gate-level), 5/5 netlists bit-exact | [`results/ci_evidence.md`](results/ci_evidence.md), `.github/workflows/ci.yml` |
 | Design docs + interview Q&A | Done, 13 docs + 5 figures | `docs/` |
 
 **Honest caveat:** on the author's Windows host, `iverilog`/`vvp` could not be
@@ -161,7 +161,8 @@ PASS    manifest.csv sha256                 points=8
 ```
 
 Real output from `python3 run_regress.py --strict` on GitHub Actions
-(run `43226906536`, commit `a8639b0`) — **this is the authoritative RTL result**:
+(first green RTL run `43226906536`, commit `a8639b0`; reproduced in the latest
+full-chain green run `43238295802`) — **this is the authoritative RTL result**:
 
 ```text
 Icarus Verilog version 12.0 (stable)

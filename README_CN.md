@@ -30,7 +30,7 @@
 | 6 个自检 testbench | **CI 真实仿真 6/6 全 PASS**（Icarus Verilog 12.0） | `results/ci_evidence.md` |
 | 真实逻辑级综合 | **已跑** — Yosys 0.70，6 个展平顶层，0 latch，0 连接问题。**仅 generic cells，无 PDK、无 PPA** | `results/synthesis_report.md` |
 | 综合后门级回放 | **已跑** — 5 个网表与 RTL 逐点一致 | `results/gatelevel_report.md` |
-| Linux CI 回归 | **全绿** — 3 个 `--strict` 步骤：回归 / 综合 / 门级回放 | `results/ci_evidence.md`、`.github/workflows/ci.yml` |
+| Linux CI 回归 | **全绿** — run `43238295802`，3 个 `--strict` 步骤：回归 / 综合 / 门级回放，5/5 网表与 RTL 逐点一致 | `results/ci_evidence.md`、`.github/workflows/ci.yml` |
 | 设计文档 + 面试手册 | 13 份文档 + 5 张图 | `docs/` |
 
 **如实说明**：作者本机的 `iverilog` 安装包被 Windows 安全策略拦截，

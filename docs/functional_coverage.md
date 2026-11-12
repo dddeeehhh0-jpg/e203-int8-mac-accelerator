@@ -116,7 +116,7 @@ deliberately excludes `tb_soc_stub` and says so in its report.
 | Structural lint | `model/rtl_lint.py` | no latches, no undriven/multi-driven nets by construction |
 | Grammar parse | `model/verilog_parse_check.py` | all `.v` sources incl. `syn/generic_cells.v` |
 | Generic-cell synthesis + latch check | `syn/run_synth.py` | 6 tops, 0 latches, cell manifest |
-| Gate-level replay (3 checks x 5 netlists) | `run_gatelevel.py` | RTL-vs-netlist ACTUAL compared bit-exactly |
+| Gate-level replay (**5 checks x 5 netlists**) | `run_gatelevel.py` | RTL reference + netlist on the same vectors; both scoreboards pass and the two ACTUAL columns match bit-exactly. `tb_requant` uses a 204-point subset, full 17,459-point sweep stays at RTL level |
 
 ---
 

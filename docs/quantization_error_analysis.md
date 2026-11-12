@@ -131,10 +131,14 @@ plus `32767` and `65535` (1,027 values), crossed with 17 `acc` edges
 exact tie values `32768`, `32769`, `-32768`, `-32769` and the full-scale
 `2^31-1`/`-2^31` cases. `tb_requant` compares the RTL against the Python
 model; `check_results.py --verify-vectors` independently recomputes all
-17,459 goldens from the raw operands; the gate-level replay repeats the same
-sweep on the synthesised netlist. Positive saturation, negative saturation,
-rounding ties and the linear region are all covered (see
-`docs/functional_coverage.md`).
+17,459 goldens from the raw operands. The **gate-level replay uses a 204-point
+subset** of the same sweep (12 representative `r32` scales x all 17 `acc`
+edges), because a zero-delay netlist expands the 32x16 multiplier into
+thousands of gates and the full sweep exceeded 300 s in CI; both the RTL
+reference and the netlist run on that same subset so their outputs stay
+bit-comparable. The full 17,459-point sweep is an RTL-level check only.
+Positive saturation, negative saturation, rounding ties and the linear region
+are all covered (see `docs/functional_coverage.md`).
 
 ---
 

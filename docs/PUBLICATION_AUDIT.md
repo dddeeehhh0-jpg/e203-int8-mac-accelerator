@@ -85,9 +85,9 @@ never committed files.
 |---|---|---|
 | 65,536 / 5,004 / 17,459 points | this repository's generated corpus | README, `docs/verification.md`, `results/` |
 | 15/15 grammar parse, 0 lint errors | this host's actual run | `results/parse_report.txt`, `lint_report.txt` |
-| 6/6 TB PASS, 88,048 dump points, 0 mismatches | GitHub Actions run `43226906536` under Icarus Verilog 12.0 | `results/ci_evidence.md`, README |
+| 6/6 TB PASS, 88,048 dump points, 0 mismatches | GitHub Actions runs `43226906536` (first RTL green) and `43238295802` (latest full-chain green), Icarus Verilog 12.0 | `results/ci_evidence.md`, README |
 | 6 synthesised tops, 0 latches, generic cell counts, sha256 manifest | this host's real Yosys 0.70 run | `results/synthesis_report.md` - relative complexity only |
-| 5 replayed netlists, 5 checks each, 204-point requant boundary subset | GitHub Actions gate-level replay (see `results/ci_evidence.md` for the run ID) | `results/gatelevel_report.md`, README |
+| 5 replayed netlists, 5 checks each, 204-point requant boundary subset, 0 RTL-vs-gate differences | GitHub Actions run `43238295802` | `results/gatelevel_report.md`, `results/ci_evidence.md`, README |
 | 2.9975%, 600 samples, 7,945.53 um^2, +1.59 ns, 0.462 mW, 861,614 lines | **team contest project, internal records** | `docs/case_study.md` only, always with the scope qualifiers |
 | Any area/Fmax/power in um^2, MHz or mW for *this* repository | **does not exist** | must never appear |
 

@@ -10,10 +10,12 @@ Read this before quoting anything from the repository.
   `results/regression_summary.md` and `results/gatelevel_report.md` are that
   host's snapshots, both labelled `SKIPPED` / not authoritative. The real
   Yosys synthesis **did** run there.
-- They **were** executed on GitHub Actions: run `43226906536` under Icarus
-  Verilog 12.0, all six PASS, 0 mismatches across all six RTL dumps (88,048
-  points). Later green runs added real synthesis and gate-level replay of
-  five flattened netlists. See `results/ci_evidence.md`.
+- They **were** executed on GitHub Actions: the latest green run
+  `43238295802` (Icarus Verilog 12.0 + Yosys 0.70) ran all three `--strict`
+  steps - six TBs PASS with 0 mismatches across all six RTL dumps (88,048
+  points), six synthesised tops with 0 latches, and 5/5 flattened netlists
+  replayed bit-exactly. The earlier RTL-only green run was `43226906536`.
+  See `results/ci_evidence.md`.
 - It is accurate to say "the six testbenches pass in CI" and "RTL and the
   generic netlist agree on the replayed vector set". It is still NOT accurate
   to say "silicon verified", "full-chip verified", "formally equivalent",

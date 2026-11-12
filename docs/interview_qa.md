@@ -128,10 +128,12 @@ structural (from the equations) plus directed/random simulation. No SVA, no
 
 **Q19. What did you actually run, and where?** On the author's Windows host:
 Python model self-tests, vector determinism, independent golden recomputation,
-structural lint, grammar parse. No `iverilog` there. **All RTL simulation and
-all gate-level replay run in GitHub Actions on `ubuntu-latest`** (Icarus
-Verilog 12.0). `results/regression_summary.md` labels the local snapshot
-`SKIPPED`; `results/ci_evidence.md` is the authoritative record.
+structural lint, grammar parse and **the real Yosys synthesis** (YoWASP build).
+No `iverilog` there. **All RTL simulation and all gate-level replay run in
+GitHub Actions on `ubuntu-latest`** (Icarus Verilog 12.0); the latest green run
+`43238295802` ran all three `--strict` steps with 5/5 netlists bit-exact.
+`results/regression_summary.md` labels the local snapshot `SKIPPED`;
+`results/ci_evidence.md` is the authoritative record.
 
 **Q20. Six testbenches - what do they cover?** `tb_mac_pe` (exhaustive 256x256
 products), `tb_mac_array` (5,004 vectors), `tb_requant` (17,459-point sweep),
@@ -162,8 +164,9 @@ netlists passing but timed out after 300 s on the 17,459-point zero-delay
 requant sweep - a simulation-cost problem, not a functional failure. The fix
 kept the full sweep at RTL level and replayed a 204-point boundary subset at
 gate level, with the TB's `N_VEC` loop bound patched in lockstep so a short
-vector file cannot silently look like a PASS. Every run and fix is logged in
-`results/ci_evidence.md`.
+vector file cannot silently look like a PASS. The next run (`43238295802`)
+was fully green: 6/6 TBs, 6 synthesised tops, 5/5 netlists bit-exact.
+Every run and fix is logged in `results/ci_evidence.md`.
 
 **Q24. Do you report code coverage?** No. There is no commercial coverage tool
 here. `docs/functional_coverage.md` is a **scenario checklist**, explicitly

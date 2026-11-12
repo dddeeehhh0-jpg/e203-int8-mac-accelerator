@@ -70,10 +70,13 @@ Because a zero-delay netlist expands the 32x16 requant multiplier into
 thousands of gates, replaying all 17,459 requant vectors exceeded 300 s in CI
 run `43233148388`. Gate replay therefore uses a **204-point boundary subset**
 (12 representative `r32` scales x all 17 `acc` edges); the full 17,459-point
-sweep remains in the RTL regression. This is an *equivalence* experiment, not
-a second full regression, and `results/gatelevel_report.md` states the reduced
-point count explicitly. See `docs/verification.md` and
-`docs/functional_coverage.md`.
+sweep remains in the RTL regression. The TBs hard-code `N_VEC`, so the
+generated TB copies for **both** runs are patched to the reduced loop bound
+after a consistency check against the full corpus. This is an *equivalence*
+experiment, not a second full regression, and `results/gatelevel_report.md`
+states the reduced point count explicitly. CI run `43238295802` is fully green
+with 5/5 netlists bit-exact. See `docs/verification.md`,
+`docs/functional_coverage.md` and `results/ci_evidence.md`.
 
 ---
 
