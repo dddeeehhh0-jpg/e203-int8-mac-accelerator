@@ -105,12 +105,20 @@ PASS    manifest.csv sha256                 points=8
 that host (the OS security policy blocked the installer), so the six Verilog
 testbenches were **not executed locally**. `.github/workflows/ci.yml` installs
 `iverilog` on `ubuntu-latest` and runs `python3 run_regress.py --strict`,
-which fails if simulation is skipped. Once that job is green, the claim
-"the six testbenches pass" is backed by `results/tb_*.log` and
-`results/dump_*.csv` uploaded as CI artifacts.
+which fails if simulation is skipped.
 
-`results/regression_summary.md` is regenerated on every run and records this
-status automatically. Nothing is hard-coded as "passed".
+That job is now **green**: run `43226906536` on commit `a8639b0` executed all
+six testbenches under Icarus Verilog 12.0; all six printed `RESULT ... PASS`
+and the independent scoreboard reported 0 mismatches on all six dumps
+(88,048 points in total). The first run (`43226072305`) failed for the
+protocol reason described in section 1; the fix was in the checker, not in the
+RTL. Logs, artifact contents and both commit hashes are recorded in
+[`results/ci_evidence.md`](../results/ci_evidence.md).
+
+`results/regression_summary.md` is regenerated on every run and records the
+status of whichever host ran it. The committed copy is the author's Windows
+snapshot (`SKIPPED`); the CI copy is uploaded as an artifact. Nothing is
+hard-coded as "passed".
 
 ---
 

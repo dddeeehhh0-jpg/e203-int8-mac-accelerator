@@ -1,8 +1,10 @@
 # Resume wording and interview prep
 
-Everything below must remain defensible. Do not upgrade "written + CI
-configured" into "verified on silicon", and do not attach the team project's
-PPA numbers to this repository.
+Everything below must remain defensible. The six testbenches now really pass
+in CI (run `43226906536`, Icarus Verilog 12.0), so "CI-verified RTL
+simulation" is accurate. Do not upgrade that into "verified on silicon" or
+"full-chip verification", and do not attach the team project's PPA numbers
+to this repository.
 
 ---
 

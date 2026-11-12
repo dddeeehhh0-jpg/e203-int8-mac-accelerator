@@ -1,5 +1,9 @@
 # E203-Based INT8 MAC Accelerator (clean-room demo)
 
+[![regress](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml)
+
+*The badge is visible to signed-in viewers while the repository is private.*
+
 A small, independently written INT8 MAC channel: 8 parallel signed multiply
 lanes, a 32-bit accumulator, `r32` requantization with round-to-nearest and a
 single output saturation, plus a NICE-style command adapter and a minimal
@@ -25,17 +29,20 @@ Read this first. "Done" always points at a file you can open.
 | Independent golden recomputation | Done (88k+ points) | `model/check_results.py --verify-vectors` |
 | 8 RTL modules | Written, grammar-parsed 14/14 | `results/parse_report.txt` |
 | Structural lint | Done, 0 errors | `results/lint_report.txt` |
-| 6 self-checking testbenches | Written; **not executed on the author's Windows host** (no simulator available) | `tb/`, `.github/workflows/ci.yml` |
-| CI regression on Linux | Configured, runs on push once the repo is published | `.github/workflows/ci.yml` |
+| 6 self-checking testbenches | **PASS, 6/6** in real simulation (Icarus Verilog 12.0) | [`results/ci_evidence.md`](results/ci_evidence.md) |
+| CI regression on Linux | **Green** — run `43226906536`, `--strict`, 6 TBs + scoreboard all PASS | [`results/ci_evidence.md`](results/ci_evidence.md), `.github/workflows/ci.yml` |
 | Logic-level synthesis | Yosys script + DC template only; **no PDK, no PPA numbers** | `syn/` |
 | Documentation | Done | `docs/` |
 
 **Honest caveat:** on the author's Windows host, `iverilog`/`vvp` could not be
-installed (the installer was blocked by the OS security policy). The Python
-model, vectors, golden verification, lint and real grammar parsing all ran and
-passed; the six Verilog testbenches are compiled and run by the CI job on
-`ubuntu-latest`. Do not quote the local run as "RTL verified".
-`results/regression_summary.md` states this explicitly on every run.
+installed (the installer was blocked by the OS security policy), so the six
+Verilog testbenches were **not run locally** — the local snapshot in
+`results/regression_summary.md` says `SKIPPED`. They were executed for real on
+GitHub Actions (`ubuntu-latest`, Icarus Verilog 12.0): all six PASS, and the
+independent Python scoreboard reports 0 mismatches on all six RTL dumps.
+Full per-TB results, run IDs, commit hashes and the (failed, then fixed) first
+run are recorded in [`results/ci_evidence.md`](results/ci_evidence.md). The fix
+was in the checker, not in the RTL.
 
 ---
 
@@ -137,8 +144,30 @@ PASS    manifest.csv sha256                 points=8
   SKIPPED  RTL simulation (6 TBs)
 ```
 
+Real output from `python3 run_regress.py --strict` on GitHub Actions
+(run `43226906536`, commit `a8639b0`) — **this is the authoritative RTL result**:
+
+```text
+Icarus Verilog version 12.0 (stable)
+RESULT tb_mac_pe PASS
+RESULT tb_mac_array PASS
+RESULT tb_requant PASS
+RESULT tb_top_stream PASS
+RESULT tb_nice_adapter PASS
+RESULT tb_soc_stub PASS
+PASS    dump_mac_pe.csv        points=65536  mismatches=0
+PASS    dump_mac_array.csv     points=5004   mismatches=0
+PASS    dump_requant.csv       points=17459  mismatches=0
+PASS    dump_top_stream.csv    points=24     mismatches=0
+PASS    dump_nice_adapter.csv  points=13     mismatches=0
+PASS    dump_soc_stub.csv      points=12     mismatches=0
+  PASS     RTL simulation (6 TBs)
+  PASS     check_results.py (RTL dumps)
+```
+
 No coverage percentage is claimed: there is no commercial coverage tool in
-this project. See [docs/verification.md](docs/verification.md).
+this project. See [docs/verification.md](docs/verification.md) and
+[`results/ci_evidence.md`](results/ci_evidence.md).
 
 ---
 
@@ -175,7 +204,7 @@ python3 run_regress.py                                  # full pipeline + summar
 On Linux (or in CI), where `iverilog` is available:
 
 ```bash
-# expected - runs in .github/workflows/ci.yml; NOT executed on the author's host
+# runs in .github/workflows/ci.yml (green in run 43226906536); not run locally
 sudo apt-get install -y iverilog
 python3 run_regress.py --strict     # fails if RTL simulation is skipped
 make regress                        # equivalent entry point

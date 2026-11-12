@@ -4,11 +4,14 @@ Read this before quoting anything from the repository.
 
 ## Verification status
 
-- **The six Verilog testbenches were not executed on the author's host.** No
-  `iverilog`/`vvp` was available (the installer was blocked by the OS security
-  policy). They are compiled and run by `.github/workflows/ci.yml` on
-  `ubuntu-latest`. Until that job has actually run, say "testbenches written,
-  grammar-parsed, CI configured" - not "RTL verified".
+- **The six Verilog testbenches were not executed on the author's Windows
+  host.** No `iverilog`/`vvp` was available there (the installer was blocked
+  by the OS security policy). They **were** executed on GitHub Actions: run
+  `43226906536` under Icarus Verilog 12.0, all six PASS, with 0 mismatches
+  across all six RTL dumps (88,048 points). See `results/ci_evidence.md`.
+  It is now accurate to say "the six testbenches pass in CI"; it is still NOT
+  accurate to say "silicon verified", "full-chip verified" or "gate-level
+  verified".
 - **No code coverage, no formal proof, no gate-level replay.** Functional
   corpus sizes are reported; coverage percentages are not.
 - **The grammar check is Verilog-2001 subset** (pyverilog). It does not check

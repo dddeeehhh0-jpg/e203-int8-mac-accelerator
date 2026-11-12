@@ -1,5 +1,9 @@
 # 基于 E203 的 INT8 MAC 加速器（clean-room 演示工程）
 
+[![regress](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml)
+
+*仓库为 Private 时，badge 仅登录用户可见。*
+
 独立重写的小型 INT8 MAC 数据通路：8 路并行有符号乘法、32 位累加、`r32`
 再量化（四舍五入 + 单次输出饱和），另有一个 NICE 风格指令适配器，以及一个
 能跑通 12 层前馈链的最小宿主 FSM。每条数据通路规则都配有位精确 Python
@@ -21,15 +25,17 @@
 | 独立黄金值复核 | 已完成（8.8 万+ 点） | `check_results.py --verify-vectors` |
 | 8 个 RTL 模块 | 已写，语法解析 14/14 | `results/parse_report.txt` |
 | 结构 lint | 已完成，0 error | `results/lint_report.txt` |
-| 6 个自检 testbench | 已写；**在作者 Windows 本机未运行**（无仿真器） | `tb/`、`.github/workflows/ci.yml` |
-| Linux CI 回归 | 已配置，仓库发布后 push 即跑 | `.github/workflows/ci.yml` |
+| 6 个自检 testbench | **CI 真实仿真 6/6 全 PASS**（Icarus Verilog 12.0） | `results/ci_evidence.md` |
+| Linux CI 回归 | **全绿** — run `43226906536`，`--strict`，6 个 TB 与 scoreboard 全 PASS | `results/ci_evidence.md`、`.github/workflows/ci.yml` |
 | 逻辑级综合 | 仅脚本，无 PDK、无 PPA 数字 | `syn/` |
 
-**如实说明**：作者本机的 `iverilog` 安装包被 Windows 安全策略拦截，无法安装，
-因此六个 Verilog testbench 未在本机执行。本机跑通的是模型、向量、黄金值复核、
-结构 lint 与真实语法解析；RTL 仿真由 CI 在 `ubuntu-latest` 上完成。
-`results/regression_summary.md` 每次都会写明这一点，**不要把本机这次运行
-表述成"RTL 已验证"**。
+**如实说明**：作者本机的 `iverilog` 安装包被 Windows 安全策略拦截，六个
+Verilog testbench **未在本机执行**（本机快照 `results/regression_summary.md`
+里写的是 `SKIPPED`）。但它们已在 GitHub Actions（`ubuntu-latest`，
+Icarus Verilog 12.0）真实跑过：六个 TB 全 PASS，独立 Python scoreboard 对
+六份 RTL dump 均为 0 mismatch。首个 run `43226072305` 曾因 scoreboard 未遵守
+握手协议而失败，修复在核对脚本、不在 RTL；完整日志、run ID 与 commit hash
+见 `results/ci_evidence.md`。**CI 结果才是 RTL 的权威结论，本机快照不是。**
 
 ---
 
@@ -91,16 +97,16 @@ python3 model/verilog_parse_check.py
 python3 run_regress.py
 ```
 
-Linux / CI（装有 iverilog）：
+Linux / CI（装有 iverilog，run `43226906536` 已全绿通过）：
 
 ```bash
-# expected：以下由 CI 执行，作者本机未执行
 sudo apt-get install -y iverilog
 python3 run_regress.py --strict
 make regress
 ```
 
 `--strict` 会把"仿真被跳过"判为失败，所以 CI 绿灯才代表六个 TB 真跑过。
+六个 TB 的实际输出与逐点比对结果见 `results/ci_evidence.md`。
 
 ---
 
