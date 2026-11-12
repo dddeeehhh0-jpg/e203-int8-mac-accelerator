@@ -39,8 +39,10 @@ def main() -> int:
         return 0
 
     files = sorted(
-        p for folder in ("rtl", "tb")
+        p for folder in ("rtl", "tb", "syn")
         for p in glob.glob(os.path.join(ROOT, folder, "**", "*.v"), recursive=True)
+        # syn/out holds generated netlists (build products), not sources.
+        if os.sep + "out" + os.sep not in p
     )
     lines = ["# Verilog grammar check (pyverilog, Verilog-2001 subset)", ""]
 

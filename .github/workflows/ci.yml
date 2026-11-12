@@ -17,15 +17,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Icarus Verilog and optional grammar checker
+      - name: Install simulator, synthesis tool and grammar checker
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends iverilog
           iverilog -V | head -1
-          python3 -m pip install --quiet pyverilog
+          python3 -m pip install --quiet pyverilog "yowasp-yosys==0.70.0.0.post1259"
+          yowasp-yosys -V | head -2
 
-      - name: Full regression (RTL simulation mandatory)
+      - name: Full RTL regression (simulation mandatory)
         run: python3 run_regress.py --strict
+
+      - name: Logic synthesis (generic cells, NO PDK / NO PPA)
+        run: python3 syn/run_synth.py --strict
+
+      - name: Gate-level replay of the synthesised netlists
+        run: python3 run_gatelevel.py --strict
 
       - name: Upload evidence
         if: always()
@@ -35,4 +42,7 @@ jobs:
           path: |
             results/
             vectors/gen/manifest.csv
+            syn/out/*_net.v
+            syn/out/*_yosys.log
+            syn/out/netlist_manifest.csv
           if-no-files-found: warn

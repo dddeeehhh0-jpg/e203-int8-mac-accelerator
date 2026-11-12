@@ -7,11 +7,14 @@ vectors/gen/*
 !vectors/gen/manifest.csv
 results/dump_*.csv
 results/tb_*.log
+results/gl_dump_*.csv
+results/gl_tb_*.log
 results/dc_*.rpt
-# lint_report.txt, parse_report.txt, regression_summary.md and
+# lint_report.txt, parse_report.txt, regression_summary.md,
+# synthesis_report.md, gatelevel_report.md, ci_evidence.md and
 # vectors/gen/manifest.csv are deliberately NOT ignored: they are this host's
-# evidence snapshot and README/docs link to them. run_regress.py regenerates
-# them on every run; CI uploads its own copies as artifacts.
+# evidence snapshot and README/docs link to them. The scripts regenerate the
+# generated ones on every run; CI uploads its own copies as artifacts.
 syn/out/
 __pycache__/
 *.pyc

@@ -1,6 +1,6 @@
 # Regression summary
 
-- Generated: `2026-11-12T21:23:17+08:00`
+- Generated: `2026-11-12T21:55:37+08:00`
 - Platform: `Windows 11`, Python `3.13.14`
 - Simulator: `not installed on this host`
 - Command: `python3 run_regress.py` (or `make regress`)
@@ -14,7 +14,7 @@
 | gen_vectors.py determinism | PASS | two runs produced identical sha256 manifests |
 | check_results.py --verify-vectors | PASS | checker mutation test: PASS (errors=1, first=2); PASS    pe_full.hex golden                  points=65536; PASS    array_rand.hex golden               points=5004; PASS    requant_ |
 | rtl_lint.py | PASS | files   : 14; modules : 14; errors  : 0 |
-| verilog_parse_check.py grammar | PASS | 14 files parsed; failures=0 |
+| verilog_parse_check.py grammar | PASS | 15 files parsed; failures=0 |
 | RTL simulation (6 TBs) | SKIPPED | iverilog/vvp not available on this host |
 | check_results.py (RTL dumps) | SKIPPED | no dumps (simulation not run) |
 
