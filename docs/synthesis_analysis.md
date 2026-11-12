@@ -1,69 +1,140 @@
-# Synthesis analysis (scope and limits)
+# Synthesis analysis (real generic mapping: results, scope and limits)
 
-## 1. What this repository actually contains
-
-| File | Purpose | Requires |
-|---|---|---|
-| `syn/synth_yosys.ys` | generic **logic-level** mapping, prints a `stat` cell-count table | Yosys, no library |
-| `syn/dc_template.tcl` | a Design Compiler template with the library path deliberately left blank | your own `.db`/`.lib`, a license |
-
-**No PDK, no standard-cell library, no netlist, no parasitics, no timing
-report and no power report are in this repository.** Consequently there is no
-area in um^2, no Fmax in MHz and no power in mW that belongs to this project.
-Any such number you may see in `docs/case_study.md` comes from a *different*,
-team project and is labelled as such.
+> **Status changed.** This repository used to contain only synthesis *scripts*.
+> It now runs a **real Yosys logic-level mapping** in CI and on the author's
+> host, produces structural netlists, and replays them in simulation. The
+> numbers are real - but they are **generic gate counts, not PPA**. Read the
+> scope box below before quoting anything.
 
 ---
 
-## 2. What the Yosys script can and cannot tell you
+## 1. What is actually run
 
 ```
-yosys -s syn/synth_yosys.ys
+python3 syn/run_synth.py --strict     # real synthesis
+python3 run_gatelevel.py --strict     # replay the synthesised netlists
 ```
 
-It runs `read_verilog`, `hierarchy -check`, `proc`, `opt`, `techmap` and
-`stat`, then writes a structural JSON/RTLIL dump. The output is a count of
-**generic** cells (`$add`, `$mul`, `$mux`, `$dff`, ...), useful for:
+Flow (`syn/run_synth.py`, tool pinned to Yosys 0.70 via `yowasp-yosys`):
 
-- confirming the design elaborates without undriven or multiply-driven nets;
-- seeing that `mac_array.v` really produced 8 multipliers and a balanced
-  adder tree rather than a serial chain;
-- comparing two versions of *this* RTL against each other (relative cell
-  counts under the same script).
+```
+read_verilog -sv (6 synthesizable files)
+  -> hierarchy -check -top <top>
+  -> proc -> opt -> techmap -> opt -> flatten -> opt
+  -> setundef -zero -> opt -> check -> stat
+  -> write_verilog -noattr -noexpr -nohex
+```
 
-It is **not** useful for:
+Six tops are mapped: `mac_pe`, `mac_array`, `acc_stage`, `requant`,
+`int8_mac_top`, `nice_adapter`. `flatten` makes each netlist a **single module
+named after the DUT with its ports intact** (without it Yosys emits a
+`$paramod...` hierarchy that no plain testbench can instantiate). `setundef
+-zero` removes X literals so the netlist is deterministic in simulation.
 
-- comparing with a synthesised PDK netlist (no drive strength, no cap, no
-  wireload, no real cell areas);
-- quoting an absolute area or a clock period;
-- claiming timing closure.
+Outputs (all generated, deterministic):
 
-The script prints a comment saying exactly this. Do not strip it.
+| File | Content |
+|---|---|
+| `syn/out/<top>_net.v` | flattened structural netlist (gitignored build product, uploaded as CI artifact) |
+| `syn/out/<top>_yosys.log` | full tool log including `check` and `stat` |
+| `syn/out/netlist_manifest.csv` | per-netlist sha256 + byte count |
+| `results/synthesis_report.md` | per-top cell counts, sequential bits, source hashes, scope box |
+
+`check` reported **0 problems on all six tops** (no undriven / multiply-driven
+nets) and the mapped netlists contain **0 latches** - the design is fully
+synchronous. `run_synth.py` fails loudly if a future Yosys emits a generic
+primitive that has no model in `syn/generic_cells.v`, or if any latch appears.
+
+Exact cell counts are in `results/synthesis_report.md` (regenerated every
+run). As an order of magnitude: `mac_pe` ~0.5k, `mac_array` ~4.9k,
+`requant` ~3.9k, `int8_mac_top` ~9.5k, `nice_adapter` ~9.3k generic cells.
 
 ---
 
-## 3. How to talk about an optimisation properly
+## 2. What the gate-level replay adds
+
+A netlist made of `\$_AND_` / `\$_DFFE_*` instances cannot be simulated
+without primitives. `syn/generic_cells.v` defines them **by hand** (zero-delay
+behavioural models), keeping the repository clean-room and letting the tool
+fail loudly on an unknown cell. `run_gatelevel.py` then:
+
+1. generates a TB copy with the parameter override removed (after checking
+   the override equals the synthesised default width);
+2. runs an **RTL reference** and the **gate-level netlist** on the *same*
+   vector file in isolated directories;
+3. requires five checks per TB: RTL `RESULT PASS`, gate `RESULT PASS`,
+   independent scoreboard on both dumps, and bit-exact equality of the two
+   ACTUAL columns.
+
+Because a zero-delay netlist expands the 32x16 requant multiplier into
+thousands of gates, replaying all 17,459 requant vectors exceeded 300 s in CI
+run `43233148388`. Gate replay therefore uses a **204-point boundary subset**
+(12 representative `r32` scales x all 17 `acc` edges); the full 17,459-point
+sweep remains in the RTL regression. This is an *equivalence* experiment, not
+a second full regression, and `results/gatelevel_report.md` states the reduced
+point count explicitly. See `docs/verification.md` and
+`docs/functional_coverage.md`.
+
+---
+
+## 3. What is and is NOT included - the hard scope
+
+**Included:** generic gate-level mapping, cell counts, structural netlists,
+netlist simulation, source/netlist hashes, latch and connectivity checks.
+
+**NOT included / NOT claimed:**
+
+- No PDK, no standard-cell library, no `.lib`/`.db`, no drive strength, no
+  wireload, no capacitance.
+- Therefore **no area in um^2, no Fmax, no clock period, no power in mW**.
+  Cell counts are *relative complexity indicators* for this design under this
+  exact script, comparable only between two runs of the same script.
+- No SDC, no STA, no parasitics, no corners, no timing closure, no
+  optimisation loop. `syn/dc_template.tcl` is a scaffold with an empty
+  library path, not a runnable flow.
+- No formal RTL-vs-netlist equivalence proof; the replay is simulation on a
+  finite vector set under a zero-delay primitive model.
+- `sram_beh.v` and `mac_soc_stub.v` are **simulation-only** (behavioural memory
+  array + hierarchical `$readmemh`). They are explicitly excluded from
+  synthesis; the 12-layer host chain is verified at RTL/behavioural level by
+  `tb_soc_stub`, not at gate level.
+
+Any um^2 / MHz / mW number you may see in `docs/case_study.md` comes from a
+**different, team project** and is labelled as such. It must never be attached
+to this repository, and this repository's cell counts must never be used as
+the team project's PPA.
+
+---
+
+## 4. How to talk about an optimisation properly
 
 Bad: "area went down 11%".
-Good: "narrowing the requantization scale from 16 bits to 10 bits narrowed the
-multiplier and its operand registers; that shortened the critical path through
-the multiply-add stage and reduced cell count. The improvement is a
+Good: "narrowing the requantisation scale from 16 bits to 10 bits narrows the
+multiplier and its operand registers; that shortens the combinational path
+through the multiply-add stage and reduces cell count. The improvement is a
 consequence of the width change, not of a tool switch."
 
 That causal chain (width -> operator/register -> path -> result) is what an
-interviewer is actually testing for. It is also why `requant.v` keeps every
-width as a parameter with a written proof in `docs/fixed_point_design.md`
-rather than magic constants.
+interviewer is testing for. It is also why `requant.v` keeps every width as a
+parameter with a written proof in `docs/fixed_point_design.md` and
+`docs/quantization_error_analysis.md` rather than magic constants.
 
-If you later run a real synthesis, record it as a table with the exact
+The same reasoning explains the current numbers: `requant` is expensive
+because of the `acc(32b) x r32(16b)` multiplier; `mac_array` is next because
+of eight signed 8x8 multipliers plus a balanced adder tree; `int8_mac_top`
+and `nice_adapter` contain both, so their counts are approximately the sum
+plus FSM/config registers. That near-additivity is a useful sanity check on
+the mapping, not an area figure.
+
+If you later run a real PDK synthesis, record it as a table with the exact
 library, corner, constraints and script hash alongside the numbers. A number
 without that context is not evidence.
 
 ---
 
-## 4. DC template
+## 5. DC template
 
-`dc_template.tcl` contains placeholder variables at the top:
+`syn/dc_template.tcl` contains placeholder variables at the top:
 
 ```tcl
 set TARGET_LIBRARY ""     ;# fill in with YOUR OWN .db path
@@ -71,8 +142,8 @@ set LINK_LIBRARY   ""     ;# fill in
 set CLOCK_PERIOD   6.67   ;# ns, example only
 ```
 
-It is a scaffold, not a runnable flow. It is provided so that someone with a
-legitimate library can start from a clean script instead of from this
-repository's guesses. Committing a vendor library here would be both a licence
-problem and a contest-rule problem, so it is explicitly listed in
-`.gitignore`.
+It is a scaffold, not a runnable flow. It is provided so someone with a
+legitimate library can start from a clean script instead of this
+repository's guesses. Committing a vendor library here would be both a
+licence problem and a contest-rule problem, so `*.lib` / `*.db` / `pdk/` are
+hard-excluded in `.gitignore`.

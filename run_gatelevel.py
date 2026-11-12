@@ -1,41 +1,52 @@
 #!/usr/bin/env python3
-"""Gate-level replay: simulate the Yosys-mapped netlists with the SAME TBs.
+"""Gate-level replay: prove RTL and the synthesised netlist agree, bit-exactly.
 
-Run AFTER both of these:
+Run AFTER:
 
     python3 model/gen_vectors.py
-    python3 run_regress.py --strict       # RTL simulation, writes results/dump_*.csv
-    python3 syn/run_synth.py --strict     # writes syn/out/<top>_net.v
+    python3 run_regress.py --strict       # FULL RTL regression, all vectors
+    python3 syn/run_synth.py --strict     # flattened structural netlists
     python3 run_gatelevel.py --strict
 
-Three independent checks per testbench:
-  1. the testbench's own self-check prints ``RESULT <tb> PASS``;
-  2. the independent scoreboard (model/check_results.py) re-checks the
-     gate-level dump against the golden word (including the ready/valid
-     protocol rule for the streaming dump);
-  3. the gate-level ACTUAL column is compared bit-for-bit with the RTL
-     ACTUAL column, using the same protocol rule. This is the actual
-     RTL-vs-netlist equivalence evidence.
+WHY A REDUCED VECTOR SET
+  A zero-delay netlist maps the 32x16 requant multiplier into thousands of
+  gate primitives. Replaying all 17,459 requant vectors produces tens of
+  millions of delta-cycle events and exceeded 300 s in the first real CI run
+  (43233148388) - a simulation-cost problem, not a functional failure. Gate
+  replay is an EQUIVALENCE check, not a re-run of the full regression, so it
+  uses a representative boundary subset. The full 17,459-point sweep still
+  runs at RTL level in `run_regress.py --strict`. Only tb_requant is reduced;
+  the other four netlists keep their full vectors. The TBs hard-code their
+  loop bound (N_VEC), so generated TB copies for BOTH runs are patched to the
+  reduced count, with a consistency check against the full corpus first.
 
-Gate-level TBs run in build/gl_run/ so their ``$fopen("results/...")`` cannot
-overwrite the RTL dumps. The gate-level dumps are copied to
-``results/gl_dump_*.csv`` for the CI artifact.
+HOW EQUIVALENCE IS STILL RIGOROUS
+  For each TB we run TWO simulations on the SAME reduced vector file, in two
+  isolated directories:
+    * an RTL reference (original TB + original RTL sources)
+    * the gate-level netlist (generated TB copy + netlist + generic_cells.v)
+  Then, per TB, five checks must all be green:
+    1. RTL reference prints `RESULT <tb> PASS`;
+    2. gate-level prints `RESULT <tb> PASS`;
+    3. independent scoreboard on the RTL-reference dump: 0 errors;
+    4. independent scoreboard on the gate-level dump: 0 errors;
+    5. RTL ACTUAL column == gate-level ACTUAL column, row by row, under the
+       same ready/valid protocol rule (streaming dumps ignore payload while
+       valid=0).
+  Any mismatch fails the build. Nothing is relaxed.
 
-SCOPE: this proves functional equivalence ON THIS VECTOR SET under a
-zero-delay behavioural primitive model. It is NOT formal equivalence, NOT a
-timing check, NOT synthesis-with-PDK, and NOT a claim about the contest chip.
+SCOPE: functional equivalence on THIS vector set under a zero-delay
+behavioural primitive model. NOT formal equivalence, NOT timing, NOT
+PDK synthesis, NOT a claim about the contest chip.
 """
 from __future__ import annotations
 
 import argparse
 import csv
-import io
-import os
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,13 +63,43 @@ TARGETS = {
     "tb_nice_adapter": ("nice_adapter", "dump_nice_adapter.csv"),
 }
 
-GLDIR = ROOT / "build" / "gl_run"
+# Same synthesizable source set used by syn/run_synth.py (the behavioural
+# sram_beh / mac_soc_stub are simulation-only and deliberately excluded).
+RTL_SOURCES = [
+    "rtl/mac/mac_pe.v",
+    "rtl/mac/mac_array.v",
+    "rtl/mac/acc_stage.v",
+    "rtl/mac/requant.v",
+    "rtl/top/int8_mac_top.v",
+    "rtl/top/nice_adapter.v",
+]
 
-# Parameter values the RTL was synthesised with. A structural netlist has NO
-# parameters (Yosys has already specialised them), so the replay TB must drop
-# its `#(.PARAM(v))` override. We PARSE that override and assert it equals the
-# synthesised value instead of silently discarding it - otherwise a TB that
-# changed a width would appear to pass against the wrong hardware.
+# Representative r32 scales for the gate-level requant sweep. Everything else
+# (all 17 acc edges) is kept for every selected scale. The FULL 1,027-scale
+# sweep is still exercised at RTL level by run_regress.py --strict.
+GL_R32_SUBSET = {0, 1, 2, 3, 16, 64, 256, 512, 1023, 1024, 32767, 65535}
+
+# Primary stimulus file of each TB. The TBs hard-code the vector count in a
+# `localparam integer N_VEC` / `for (i = 0; i < N; ...)` loop, so a reduced
+# vector file MUST be accompanied by a reduced loop bound in the generated TB
+# copy. Both the RTL reference and the gate-level run use that copy, which
+# keeps the two dumps row-for-row comparable.
+TB_VECTOR = {
+    "tb_mac_pe":       "pe_full.hex",
+    "tb_mac_array":    "array_rand.hex",
+    "tb_requant":      "requant_scan.hex",
+    "tb_top_stream":   "top_seq.hex",
+    "tb_nice_adapter": "nice_seq.hex",
+}
+
+GLDIR = ROOT / "build" / "gl_run"
+RTLDIR = GLDIR / "rtl_ref"
+GATEDIR = GLDIR / "gate"
+
+# Parameter values the RTL was synthesised with. A flattened structural
+# netlist has NO parameters, so the replay TB must drop its `#(.PARAM(v))`
+# override. We parse and CHECK that override before dropping it - otherwise a
+# TB that changed a width could appear to pass against the wrong hardware.
 DEFAULTS = {
     "mac_pe":       {"IN_W": 8},
     "mac_array":    {"N_LANE": 8, "IN_W": 8, "ACC_W": 32},
@@ -92,10 +133,34 @@ def strip_dut_params(text: str, top: str):
     bad = {n: (v, DEFAULTS[top].get(n)) for n, v in overrides.items()
            if DEFAULTS[top].get(n) != v}
     if bad:
-        return text, overrides, f"{top}: TB overrides differ from synthesised "
-        f"defaults: {bad}"
+        return text, overrides, (
+            f"{top}: TB overrides differ from synthesised defaults: {bad}")
     hash_pos = m.end() - 2
     return text[:hash_pos] + text[i + 1:], overrides, None
+
+
+def patch_vec_count(text: str, tb: str, notes: dict):
+    """Keep a TB's hard-coded loop bound in sync with its (possibly reduced)
+    stimulus file. Returns (patched_text, old_count, new_count, error)."""
+    vec = TB_VECTOR[tb]
+    if vec not in notes:
+        return text, None, None, None          # not reduced -> no patch
+    full, kept = notes[vec]
+    if full == kept:
+        return text, None, None, None
+    pattern = r"(localparam\s+integer\s+N_VEC\s*=\s*)(\d+)(\s*;)"
+    m = re.search(pattern, text)
+    if not m:
+        return text, None, None, (
+            f"{tb}: vector file reduced to {kept} but no `N_VEC` localparam "
+            "to patch - refusing to run with a wrong loop bound")
+    old = int(m.group(2))
+    if old != full:
+        return text, None, None, (
+            f"{tb}: TB declares N_VEC={old} but {vec} has {full} lines - "
+            "the corpus and the TB are out of sync")
+    patched = text[:m.start()] + m.group(1) + str(kept) + m.group(3) + text[m.end():]
+    return patched, old, kept, None
 
 
 def find_sim():
@@ -113,9 +178,10 @@ def compare_actual(rtl: list[str], gl: list[str], name: str) -> dict:
         return {"name": name, "points": min(len(rtl), len(gl)),
                 "errors": abs(len(rtl) - len(gl)) + 1,
                 "first": ("row count differs", len(rtl), len(gl))}
+    import tempfile
     with tempfile.TemporaryDirectory() as tmp:
-        # The filename must retain the dump name: check_one_dump switches to
-        # the ready/valid protocol rule for streaming dumps by name.
+        # Filename must retain the dump name: check_one_dump switches to the
+        # ready/valid protocol rule for streaming dumps by name.
         p = Path(tmp) / name
         with p.open("w", newline="", encoding="ascii") as fh:
             w = csv.writer(fh)
@@ -125,167 +191,265 @@ def compare_actual(rtl: list[str], gl: list[str], name: str) -> dict:
         return check_results.check_one_dump(str(p))
 
 
+def prepare_vectors() -> dict:
+    """Copy vectors into both isolated dirs; reduce the expensive requant sweep."""
+    src = ROOT / "vectors" / "gen"
+    notes = {}
+    for base in (RTLDIR, GATEDIR):
+        (base / "results").mkdir(parents=True, exist_ok=True)
+        (base / "vectors" / "gen").mkdir(parents=True, exist_ok=True)
+    for f in sorted(src.iterdir()):
+        if not f.is_file():
+            continue
+        data = f.read_text(encoding="ascii")
+        if f.name == "requant_scan.hex":
+            all_lines = [l for l in data.splitlines() if l.strip()]
+            kept = [l for l in all_lines
+                    if int(l.split()[1], 16) in GL_R32_SUBSET]
+            notes[f.name] = (len(all_lines), len(kept))
+            data = "\n".join(kept) + "\n"
+        for base in (RTLDIR, GATEDIR):
+            (base / "vectors" / "gen" / f.name).write_text(data,
+                                                           encoding="ascii")
+    return notes
+
+
+def run_one(iverilog, vvp, tb, top, dump, rtl_sources, notes):
+    """Return a result dict for one testbench."""
+    net = ROOT / "syn" / "out" / f"{top}_net.v"
+    prims = ROOT / "syn" / "generic_cells.v"
+    orig_tb = ROOT / "tb" / f"{tb}.v"
+    res = {"tb": tb, "top": top, "note": ""}
+
+    raw_tb = orig_tb.read_text(encoding="utf-8")
+    rtl_src, old_n, new_n, perr = patch_vec_count(raw_tb, tb, notes)
+    if perr:
+        res.update(status="VEC_COUNT_MISMATCH", note=perr)
+        return res
+    gl_src, overrides, err = strip_dut_params(rtl_src, top)
+    if err:
+        res.update(status="PARAM_MISMATCH", note=err)
+        return res
+    net_text = net.read_text(encoding="utf-8")
+    if f"module {top}(" not in net_text:
+        res.update(status="NO_TOP",
+                   note=f"netlist has no plain top module '{top}' "
+                        "(run_synth.py must flatten)")
+        return res
+
+    # Both simulations use generated TB copies in isolated directories, so
+    # they see the same reduced stimulus and the same loop bound. The RTL copy
+    # keeps its parameter overrides; the gate copy drops them (a flattened
+    # structural netlist has no parameters).
+    rtl_tb = RTLDIR / "tb_rtl" / f"{tb}.v"
+    gl_tb = GATEDIR / "tb_gl" / f"{tb}.v"
+    rtl_tb.parent.mkdir(parents=True, exist_ok=True)
+    gl_tb.parent.mkdir(parents=True, exist_ok=True)
+    rtl_tb.write_text(rtl_src, encoding="utf-8")
+    gl_tb.write_text(gl_src, encoding="utf-8")
+    if new_n is not None:
+        res["note"] = f"N_VEC {old_n}->{new_n} (reduced stimulus)"
+
+    # ---- RTL reference (TB copy WITH parameter overrides) ----
+    rtl_exe = RTLDIR / f"{tb}_rtl.vvp"
+    comp = subprocess.run(
+        [iverilog, "-g2012", "-o", str(rtl_exe), "-s", tb,
+         str(rtl_tb)] + [str(ROOT / s) for s in rtl_sources],
+        cwd=ROOT, capture_output=True, text=True)
+    if comp.returncode != 0:
+        res.update(status="COMPILE_FAIL",
+                   note="RTL ref: " + (comp.stderr or comp.stdout).strip()[:300])
+        return res
+    # ---- gate-level (TB copy + netlist + primitives) ----
+    gl_exe = GATEDIR / f"{tb}_gl.vvp"
+    comp = subprocess.run(
+        [iverilog, "-g2012", "-o", str(gl_exe), "-s", tb,
+         str(gl_tb), str(net), str(prims)],
+        cwd=ROOT, capture_output=True, text=True)
+    if comp.returncode != 0:
+        res.update(status="COMPILE_FAIL",
+                   note="gate: " + (comp.stderr or comp.stdout).strip()[:300])
+        return res
+
+    try:
+        rtl_run = subprocess.run([vvp, rtl_exe.name], cwd=RTLDIR,
+                                 capture_output=True, text=True, timeout=600)
+        gl_run = subprocess.run([vvp, gl_exe.name], cwd=GATEDIR,
+                                capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired as e:
+        res.update(status="TIMEOUT", note=f"simulation exceeded 600 s: {e.cmd}")
+        return res
+
+    rtl_out = rtl_run.stdout + rtl_run.stderr
+    gl_out = gl_run.stdout + gl_run.stderr
+    (ROOT / "results" / f"gl_{tb}.log").write_text(
+        "=== RTL reference ===\n" + rtl_out + "\n=== gate-level ===\n" + gl_out,
+        encoding="utf-8")
+    rtl_pass = f"RESULT {tb} PASS" in rtl_out and f"RESULT {tb} FAIL" not in rtl_out
+    gl_pass = f"RESULT {tb} PASS" in gl_out and f"RESULT {tb} FAIL" not in gl_out
+
+    rtl_dump = RTLDIR / "results" / dump
+    gl_dump = GATEDIR / "results" / dump
+    if not (rtl_dump.is_file() and gl_dump.is_file()):
+        res.update(status="NO_DUMP",
+                   note=f"rtl_dump={rtl_dump.is_file()} gl_dump={gl_dump.is_file()}")
+        return res
+
+    rtl_score = check_results.check_one_dump(str(rtl_dump))
+    gl_score = check_results.check_one_dump(str(gl_dump))
+    equiv = compare_actual(read_actual(rtl_dump), read_actual(gl_dump), dump)
+    shutil.copy2(gl_dump, ROOT / "results" / f"gl_{dump}")
+    shutil.copy2(rtl_dump, ROOT / "results" / f"gl_rtl_{dump}")
+
+    ok = (rtl_pass and gl_pass and rtl_run.returncode == 0
+          and gl_run.returncode == 0 and rtl_score["errors"] == 0
+          and gl_score["errors"] == 0 and equiv["errors"] == 0)
+    res.update(status="PASS" if ok else "FAIL",
+               points=gl_score["points"],
+               rtl_score=rtl_score["errors"], gl_score=gl_score["errors"],
+               diff=equiv["errors"], rtl_pass=rtl_pass, gl_pass=gl_pass,
+               note="" if ok else
+               f"rtl_pass={rtl_pass} gl_pass={gl_pass} "
+               f"rtl_score={rtl_score['errors']} gl_score={gl_score['errors']} "
+               f"rtl_vs_gl={equiv['errors']}")
+    return res
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--strict", action="store_true",
                     help="CI: missing simulator / failed replay is a failure")
     args = ap.parse_args()
+    (ROOT / "results").mkdir(exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     iverilog, vvp = find_sim()
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     if not (iverilog and vvp):
-        (ROOT / "results").mkdir(exist_ok=True)
         (ROOT / "results" / "gatelevel_report.md").write_text(
             "# Gate-level replay report\n\n"
             f"Generated: {ts}\n\n"
             "**SKIPPED on this host** - `iverilog`/`vvp` are unavailable. "
             "This is the author's Windows snapshot and is NOT authoritative. "
             "GitHub Actions runs `python3 run_gatelevel.py --strict` on "
-            "`ubuntu-latest`; see `results/ci_evidence.md` and the "
-            "`gatelevel-evidence` CI artifact for the real result.\n",
+            "`ubuntu-latest`; see `results/ci_evidence.md` and the CI "
+            "artifact for the real result.\n",
             encoding="utf-8")
         print("SKIPPED  gate-level replay (iverilog/vvp unavailable)")
         return 1 if args.strict else 0
 
-    # Preconditions: RTL dumps, vectors and netlists must all exist.
     missing = []
     for tb, (top, dump) in TARGETS.items():
-        for p in (ROOT / "results" / dump,
-                  ROOT / "syn" / "out" / f"{top}_net.v",
-                  ROOT / "tb" / f"{tb}.v"):
+        for p in (ROOT / "syn" / "out" / f"{top}_net.v",
+                  ROOT / "tb" / f"{tb}.v",
+                  ROOT / "syn" / "generic_cells.v"):
             if not p.is_file():
                 missing.append(str(p.relative_to(ROOT)))
     if missing:
         print("FAIL  gate-level prerequisites missing: " + ", ".join(missing))
         return 1
 
-    # Isolated working directory so gate-level $fopen cannot clobber RTL dumps.
     if GLDIR.exists():
         shutil.rmtree(GLDIR)
-    (GLDIR / "results").mkdir(parents=True)
-    (GLDIR / "vectors" / "gen").mkdir(parents=True)
-    for f in (ROOT / "vectors" / "gen").iterdir():
-        if f.is_file():
-            shutil.copy2(f, GLDIR / "vectors" / "gen" / f.name)
+    GLDIR.mkdir(parents=True)
+    notes = prepare_vectors()
 
-    (GLDIR / "tb_gl").mkdir(parents=True, exist_ok=True)
-    rows, failed = [], []
+    rows = []
     for tb, (top, dump) in TARGETS.items():
-        net = ROOT / "syn" / "out" / f"{top}_net.v"
-        prims = ROOT / "syn" / "generic_cells.v"
-
-        # A flattened Yosys netlist has no parameters. Make a TB copy whose
-        # DUT instantiation drops the override - but only after asserting the
-        # override equals the value the netlist was synthesised with.
-        tb_src, overrides, err = strip_dut_params(
-            (ROOT / "tb" / f"{tb}.v").read_text(encoding="utf-8"), top)
-        if err:
-            print("FAIL  " + err)
-            failed.append(err)
-            rows.append((tb, "PARAM_MISMATCH", 0, -1, -1, err))
-            continue
-        net_text = net.read_text(encoding="utf-8")
-        if f"module {top}(" not in net_text:
-            e = f"{tb}: netlist has no plain top module '{top}' " \
-                "(run_synth.py must flatten)"
-            print("FAIL  " + e)
-            failed.append(e)
-            rows.append((tb, "NO_TOP", 0, -1, -1, e))
-            continue
-
-        tbf = GLDIR / "tb_gl" / f"{tb}.v"
-        tbf.write_text(tb_src, encoding="utf-8")
-        exe = GLDIR / f"{tb}_gl.vvp"
-        comp = subprocess.run(
-            [iverilog, "-g2012", "-o", str(exe), "-s", tb,
-             str(tbf), str(net), str(prims)],
-            cwd=ROOT, capture_output=True, text=True)
-        if comp.returncode != 0:
-            detail = (comp.stderr or comp.stdout).strip()[:600]
-            print(f"FAIL  iverilog compile {tb}: {detail}")
-            failed.append(f"{tb}: iverilog compile failed")
-            rows.append((tb, "COMPILE_FAIL", 0, -1, -1, detail[:200]))
-            continue
-        run = subprocess.run([vvp, exe.name], cwd=GLDIR,
-                            capture_output=True, text=True, timeout=300)
-        out = run.stdout + run.stderr
-        (ROOT / "results" / f"gl_{tb}.log").write_text(out, encoding="utf-8")
-        tb_pass = f"RESULT {tb} PASS" in out and f"RESULT {tb} FAIL" not in out
-        pm = re.search(rf"RESULT {tb}\s+points=(\d+) mismatches=(\d+)", out)
-        pts, mism = (int(pm.group(1)), int(pm.group(2))) if pm else (0, -1)
-
-        gldump = GLDIR / "results" / dump
-        if not gldump.is_file():
-            failed.append(f"{tb}: no gate-level dump")
-            rows.append((tb, "NO_DUMP", pts, -1, -1, ""))
-            continue
-        score = check_results.check_one_dump(str(gldump))
-        rtl_actual = read_actual(ROOT / "results" / dump)
-        gl_actual = read_actual(gldump)
-        equiv = compare_actual(rtl_actual, gl_actual, dump)
-        shutil.copy2(gldump, ROOT / "results" / f"gl_{dump}")
-
-        ok = tb_pass and run.returncode == 0 and mism == 0 \
-            and score["errors"] == 0 and equiv["errors"] == 0
-        if not ok:
-            failed.append(f"{tb}: selfcheck={tb_pass} scoreboard="
-                          f"{score['errors']} rtl_vs_gl={equiv['errors']}")
-        status = "PASS" if ok else "FAIL"
-        print(f"{status}  gate-level {tb:18s} points={score['points']:6d} "
-              f"scoreboard_err={score['errors']} rtl_vs_gl_diff={equiv['errors']}")
-        rows.append((tb, status, score["points"], score["errors"],
-                     equiv["errors"], ""))
+        r = run_one(iverilog, vvp, tb, top, dump, RTL_SOURCES, notes)
+        rows.append(r)
+        if r["status"] == "PASS":
+            print(f"PASS  gate-level {tb:18s} points={r['points']:6d} "
+                  f"rtl_score={r['rtl_score']} gl_score={r['gl_score']} "
+                  f"rtl_vs_gl_diff={r['diff']}")
+        else:
+            print(f"FAIL  gate-level {tb:18s} {r['status']}: {r['note']}")
+    failed = [f"{r['tb']}: {r['status']}" for r in rows
+              if r["status"] != "PASS"]
 
     lines = [
         "# Gate-level replay report",
         "",
         f"Generated: {ts}",
-        "Flow: Yosys generic mapping (`syn/run_synth.py`) -> structural "
-        "netlist -> Icarus Verilog with hand-written `syn/generic_cells.v` "
-        "-> the SAME self-checking testbench and the SAME scoreboard.",
+        "Flow: Yosys generic mapping (`syn/run_synth.py`, flattened) -> "
+        "structural netlist -> Icarus Verilog with hand-written "
+        "`syn/generic_cells.v` -> the SAME self-checking testbench.",
         "",
         "> **Scope.** Functional equivalence on this vector set under a "
         "zero-delay behavioural primitive model. NOT formal equivalence, "
         "NOT timing, NOT PDK synthesis, NOT the contest chip. "
-        "The simulation-only blocks `sram_beh` / `mac_soc_stub` are not "
-        "synthesised and `tb_soc_stub` is therefore RTL/behavioural only.",
+        "`sram_beh` / `mac_soc_stub` are not synthesised, so `tb_soc_stub` is "
+        "RTL/behavioural only.",
         "",
-        "| Testbench | Netlist top | Result | Points | Scoreboard errors | "
-        "RTL-vs-netlist differences |",
-        "|---|---|---|---:|---:|---:|",
+        "## Why the gate-level vector set is smaller",
+        "",
+        "A zero-delay netlist maps the 32x16 requant multiplier to thousands "
+        "of gate primitives; replaying all 17,459 requant vectors exceeded "
+        "300 s in CI run `43233148388` (a simulation-cost issue, not a "
+        "functional failure). Gate replay is an **equivalence** check, so it "
+        "uses a representative boundary subset. The **full** 17,459-point "
+        "sweep still runs at RTL level in `run_regress.py --strict`.",
+        "",
     ]
-    for tb, status, pts, se, de, _ in rows:
-        lines.append(f"| `{tb}` | `{TARGETS[tb][0]}` | {status} | {pts} | "
-                     f"{se} | {de} |")
+    for name, (full, kept) in notes.items():
+        lines.append(f"- `{name}`: {full} RTL points -> {kept} gate-level "
+                     f"points (all 17 `acc` edges kept for each of "
+                     f"{len(GL_R32_SUBSET)} representative `r32` scales).")
+    if not notes:
+        lines.append("- No vector reduction was applied.")
     lines += [
         "",
-        "Three checks per TB: (1) in-TB `RESULT ... PASS`, (2) independent "
-        "scoreboard re-check of the gate-level dump against golden, "
-        "(3) bit-exact comparison of the gate-level ACTUAL column with the "
-        "RTL ACTUAL column under the same ready/valid protocol rule. A "
-        "mismatch in ANY of the three fails the build.",
+        "The TBs hard-code their vector count (`N_VEC`). For every reduced "
+        "stimulus file, the generated TB copy for **both** runs is patched "
+        "to the new loop bound; `patch_vec_count()` first verifies that the "
+        "original bound equals the full corpus size and fails loudly if the "
+        "corpus and TB are out of sync. A short vector file therefore cannot "
+        "silently produce a false PASS.",
         "",
-        "Gate-level dumps: `results/gl_dump_*.csv`; raw simulator output: "
-        "`results/gl_tb_*.log` (build products, gitignored; uploaded as CI "
-        "artifacts).",
+        "Both simulations (RTL reference and gate-level) use **the same "
+        "vector file, the same loop bound and the same check logic** in "
+        "isolated directories, so their dumps can be compared row by row.",
         "",
-        "The netlists are **flattened** (`syn/run_synth.py`), so each is one "
-        "module named exactly like the DUT. The replay TB is a generated copy "
-        "with the DUT's `#(.PARAM(v))` override removed, because a structural "
-        "netlist has no parameters; `run_gatelevel.py` parses the override "
-        "first and fails if it differs from the synthesised default width.",
+        "| Testbench | Netlist top | Result | Points | RTL scoreboard | "
+        "Gate scoreboard | RTL-vs-gate differences |",
+        "|---|---|---|---:|---:|---:|---:|",
     ]
-    details = [r for r in rows if len(r) > 5 and r[5]]
+    for r in rows:
+        if r["status"] == "PASS":
+            lines.append(f"| `{r['tb']}` | `{r['top']}` | PASS | "
+                         f"{r['points']} | {r['rtl_score']} | "
+                         f"{r['gl_score']} | {r['diff']} |")
+        else:
+            lines.append(f"| `{r['tb']}` | `{r['top']}` | {r['status']} | "
+                         "- | - | - | - |")
+    lines += [
+        "",
+        "Five checks per TB, all mandatory: (1) RTL reference `RESULT ... "
+        "PASS`; (2) gate-level `RESULT ... PASS`; (3) independent scoreboard "
+        "on the RTL dump; (4) independent scoreboard on the gate dump; "
+        "(5) bit-exact comparison of the two ACTUAL columns under the same "
+        "ready/valid protocol rule. This is not a relaxation of the RTL "
+        "regression - it is a separate equivalence experiment.",
+        "",
+        "The netlists are **flattened**, so each is one module named exactly "
+        "like the DUT. The gate-level TB is a generated copy with the DUT's "
+        "`#(.PARAM(v))` override removed; `run_gatelevel.py` parses the "
+        "override first and fails if it differs from the synthesised default.",
+        "",
+        "Gate-level dumps: `results/gl_dump_*.csv` and `gl_rtl_dump_*.csv`; "
+        "raw simulator output: `results/gl_tb_*.log` (build products, "
+        "gitignored; uploaded as CI artifacts).",
+    ]
+    details = [r for r in rows if r["status"] != "PASS"]
     if details:
         lines += ["", "## Failure details", ""]
-        lines += [f"- `{r[0]}`: {r[5]}" for r in details]
+        lines += [f"- `{r['tb']}` ({r['status']}): {r['note']}" for r in details]
     lines += [
         "",
         "## Status",
         "",
-        (f"**PASS** - {len(rows)} netlists replayed, all three checks green."
-         if not failed else
-         "**FAIL** - " + "; ".join(failed)),
+        (f"**PASS** - {len(rows)} netlists replayed; RTL and gate-level "
+         "agree bit-exactly on the reduced vector set."
+         if not failed else "**FAIL** - " + "; ".join(failed)),
     ]
     (ROOT / "results" / "gatelevel_report.md").write_text(
         "\n".join(lines) + "\n", encoding="utf-8")

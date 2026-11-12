@@ -4,16 +4,26 @@ Read this before quoting anything from the repository.
 
 ## Verification status
 
-- **The six Verilog testbenches were not executed on the author's Windows
-  host.** No `iverilog`/`vvp` was available there (the installer was blocked
-  by the OS security policy). They **were** executed on GitHub Actions: run
-  `43226906536` under Icarus Verilog 12.0, all six PASS, with 0 mismatches
-  across all six RTL dumps (88,048 points). See `results/ci_evidence.md`.
-  It is now accurate to say "the six testbenches pass in CI"; it is still NOT
-  accurate to say "silicon verified", "full-chip verified" or "gate-level
-  verified".
-- **No code coverage, no formal proof, no gate-level replay.** Functional
-  corpus sizes are reported; coverage percentages are not.
+- **The six Verilog testbenches and the gate-level replay were not executed
+  on the author's Windows host.** No `iverilog`/`vvp` was available there (the
+  installer was blocked by the OS security policy). The committed
+  `results/regression_summary.md` and `results/gatelevel_report.md` are that
+  host's snapshots, both labelled `SKIPPED` / not authoritative. The real
+  Yosys synthesis **did** run there.
+- They **were** executed on GitHub Actions: run `43226906536` under Icarus
+  Verilog 12.0, all six PASS, 0 mismatches across all six RTL dumps (88,048
+  points). Later green runs added real synthesis and gate-level replay of
+  five flattened netlists. See `results/ci_evidence.md`.
+- It is accurate to say "the six testbenches pass in CI" and "RTL and the
+  generic netlist agree on the replayed vector set". It is still NOT accurate
+  to say "silicon verified", "full-chip verified", "formally equivalent",
+  "timing closed" or "PPA measured".
+- **No code coverage, no formal proof.** `docs/functional_coverage.md` is a
+  scenario checklist; coverage percentages are not reported.
+- **Gate-level replay uses a reduced vector set.** A zero-delay netlist
+  expands the 32x16 multiplier into thousands of gates; replaying all 17,459
+  requant vectors exceeded 300 s in CI. The gate sweep is therefore a
+  204-point boundary subset; the full sweep stays in the RTL regression.
 - **The grammar check is Verilog-2001 subset** (pyverilog). It does not check
   elaboration, width rules, or X-propagation.
 
@@ -45,9 +55,13 @@ Read this before quoting anything from the repository.
 
 ## Result scope
 
-- **No PDK, no netlist, no area/timing/power results in this repository.**
-  `syn/` is a logic-level Yosys script and a blank DC template. See
-  `docs/synthesis_analysis.md`.
+- **No PDK, no standard-cell library, and no area/timing/power results.**
+  The repository *does* generate **generic** structural netlists with Yosys
+  and replays them in simulation, but those are gate-level structures with no
+  drive strength, no wireload, no parasitics, no SDC and no timing closure.
+  Cell counts are relative complexity indicators, never um^2 / MHz / mW.
+  `syn/dc_template.tcl` is a blank scaffold. See
+  `docs/synthesis_analysis.md` and `results/synthesis_report.md`.
 - All vectors are synthetic and derived from `SEED = 20261112`. There is no
   audio, no dataset and no trained weight anywhere in the tree.
 - Numbers in `docs/case_study.md` belong to a separate team project, are

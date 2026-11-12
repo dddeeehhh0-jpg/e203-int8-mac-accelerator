@@ -8,6 +8,7 @@ vectors/gen/*
 results/dump_*.csv
 results/tb_*.log
 results/gl_dump_*.csv
+results/gl_rtl_dump_*.csv
 results/gl_tb_*.log
 results/dc_*.rpt
 # lint_report.txt, parse_report.txt, regression_summary.md,

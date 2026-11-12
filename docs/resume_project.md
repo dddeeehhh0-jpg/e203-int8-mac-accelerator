@@ -1,88 +1,131 @@
 # Resume wording and interview prep
 
-Everything below must remain defensible. The six testbenches now really pass
-in CI (run `43226906536`, Icarus Verilog 12.0), so "CI-verified RTL
-simulation" is accurate. Do not upgrade that into "verified on silicon" or
-"full-chip verification", and do not attach the team project's PPA numbers
-to this repository.
+This document is split in two on purpose. **Section A describes only this
+clean-room repository**: everything in it is reproducible here, with a file
+you can open. **Section B describes the separate team contest project** and
+is deliberately kept to method and conclusions. Never carry a number from B
+into a sentence about A.
+
+Hard red lines (from `docs/PUBLICATION_AUDIT.md` and `docs/interview_qa.md`):
+
+- "six testbenches pass" means **CI-verified RTL simulation of this repository**,
+  not silicon and not full-chip verification.
+- Generic-cell counts are **not** area in um^2, **not** Fmax, **not** power.
+- Gate-level replay here is functional equivalence on a finite vector set,
+  not formal equivalence and not timing closure.
+- 2.9975% / 600 samples / 7,945.53 um^2 / +1.59 ns / 0.462 mW belong to the
+  **team project**. 0.462 mW is accelerator-local, not chip power.
 
 ---
 
-## Chinese resume (3 lines)
+## A. This repository - say it as decision / reason / result
+
+| Decision | Reason | Result (and where to check) |
+|---|---|---|
+| 8 parallel INT8 lanes + one INT32 accumulator | `8 * 128 * 128 = 131072 < 2^18`, so no intermediate clipping is needed; one byte per operand halves the operand traffic vs FP16 | exhaustive 256x256 lane test, 65,536 points, 0 mismatch (`tb_mac_pe`, `results/ci_evidence.md`) |
+| `r32` as a real 16-bit multiplier instead of `1 << shamt` | a shift only expresses powers of two; a runtime scale fits any per-layer scale continuously. Cost: one 32x16 multiplier per group, shared by 8 lanes | 17,459-point `r32` x `acc` boundary sweep at RTL level (`docs/quantization_error_analysis.md`) |
+| `+2^15` then arithmetic `>>> 16`, and saturate only at the output | round-to-nearest (ties to +inf) instead of a systematic -0.5 LSB truncation bias per layer; intermediate clipping would be amplified by the next layer | bias derivation, exact-tie and full-scale vectors, `sat_flag` reported rather than hidden |
+| ready/valid with registered output and no combinational `valid <- ready` path | backpressure without a combinational loop or a bubble on every stall | 24 cycle-accurate beats incl. stall / cfg bubble / mid-stream reset, plotted from the real stimulus (`docs/images/fig4_stream_waveform.png`) |
+| Python golden + deterministic vectors + independent scoreboard | a bug inside a testbench must not be able to declare its own DUT correct | `--verify-vectors` recomputes the corpus; `check_results.py` re-reads dumps; 2 checker mutation tests prove it can fail |
+| Real Yosys generic mapping + hand-written cell models + netlist replay | "I wrote a synthesis script" is not evidence; a synthesised netlist that disagrees with RTL is a real bug | 6 flattened tops, 0 latches, 8 generic cell types (`results/synthesis_report.md`); 5 netlists replayed with 5 mandatory checks each (`results/gatelevel_report.md`) |
+| Gate replay uses a 204-point boundary subset for `tb_requant` | a zero-delay netlist expands the 32x16 multiplier into thousands of gates; 17,459 points exceeded 300 s in CI. Equivalence is not a second full regression | **full** 17,459-point sweep remains in `run_regress.py --strict`; the TB loop bound is patched in lockstep with the reduced corpus, and both RTL and gate runs use the same vectors |
+
+### Chinese resume (3 lines)
 
 > 独立实现 INT8 MAC 加速器开源工程（Verilog + Python 位精确参考模型）：8 lane
-> 乘加阵列、32 位累加、r32 再量化与单次饱和；6 个自检 testbench、
-> 确定性向量与独立逐点比对脚本，一条命令完成回归。
-> 另在 E203 + NICE 团队项目中负责 12 层前馈网络线性层的 RTL、定点方案、
-> 门级回放与综合（团队项目，数字见项目文档）。
+> 乘加阵列、INT32 累加、r32 再量化与单次饱和；6 个自检 testbench、
+> 确定性向量与独立逐点 scoreboard，一条命令完成回归。
+> 用 Yosys 真实综合 6 个顶层并展平，自写 generic cell 行为模型完成综合后网表
+> 回放（RTL 与网表逐点一致）；三个 `--strict` 步骤在 GitHub Actions 全绿。
+> **无 PDK、无面积/Fmax/功耗数字；门级回放不是形式等价，也不是流片验证。**
 
-## English resume (3 lines)
+### English resume (3 lines)
 
 > Built a clean-room INT8 MAC accelerator (Verilog + bit-exact Python model):
-> 8-lane array, INT32 accumulation, r32 requantization with single-stage
-> saturation, six self-checking testbenches and a point-by-point scoreboard
-> driven by one `run_regress.py`.
-> On a team project, designed the RTL and fixed-point scheme for a 12-layer
-> FFN accelerator on an E203 + NICE platform, and carried it through gate-level
-> replay and Design Compiler synthesis.
+> 8-lane array, INT32 accumulation, `r32` requantization with single-stage
+> saturation, six self-checking testbenches and an independent point-by-point
+> scoreboard driven by `run_regress.py`.
+> Performed real Yosys generic-cell synthesis of six tops (flattened, 0 latches)
+> and post-synthesis netlist replay against the RTL using hand-written
+> zero-delay cell models; regression / synthesis / replay run as three
+> `--strict` CI steps. **No PDK, no PPA numbers, no formal equivalence claim.**
+
+### 30-second version
+
+Say three things: **what** it computes (8-lane INT8 dot product plus
+requantization), **where the difficulty is** (fixed-point rounding bias and
+ready/valid backpressure), **how it was checked** (bit-exact Python golden,
+deterministic vectors, an independent scoreboard, and a synthesised netlist
+replayed against the RTL).
+
+### 1-minute version
+
+Add the iteration story: the first CI run was a real simulation but the
+scoreboard compared a protocol don't-care payload and reported 9 false
+mismatches; the fix was in the checker, not the RTL. Later gate-level runs
+exposed parameter overrides on a flattened netlist, a hierarchical `$paramod`
+top and finally a simulation-cost problem. Every run ID and every fix is
+recorded in `results/ci_evidence.md`.
+Close with what is NOT done: no PDK, no STA, no formal equivalence, no code
+coverage percentage.
 
 ---
 
-## 30-second version
+## B. Team contest project - separate, and only in this section
 
-Say three things: **what** it computes (the linear layers of a 12-layer
-feed-forward net), **where the difficulty is** (fixed-point rounding and the
-coprocessor interface overhead), **how it was checked** (point-by-point
-comparison against a bit-exact Python model, plus gate-level replay on the team
-project).
+May be mentioned as "on a team project" with `docs/case_study.md` as the
+reference. Keep the scope qualifiers attached:
 
-## 1-minute version
-
-Add the iteration story and the boundary: V1 -> V2 -> V3, why the scale field
-was narrowed from 16 to 10 bits (all 12 calibrated values were below 1024),
-what that did to the multiplier and timing, and what is still not done (no
-PDK-based PPA in the open repository, no full-chip verification claim).
+- 12-layer FFN linear layers on an E203 + NICE platform; I owned the RTL,
+  the fixed-point scheme, gate-level replay and synthesis flow.
+- Module-level 12-layer continuous inference passed; SoC level was **sampled**,
+  not "full-chip verification passed".
+- 600 samples were **team-selected**; the organiser's evaluation list is not
+  published. Never say "passed the organiser's evaluation".
+- Any power figure is **accelerator-and-interface local**, not chip power; the
+  preliminary round did not require full-chip power.
 
 ---
 
-## Eight likely interview questions
+## Eight questions to have ready
 
 1. **Why INT8 rather than FP16?** Bandwidth (one byte per operand), multiplier
-   area, and energy; the premise is that quantisation error stays within the
-   layer's budget. Point at `docs/fixed_point_design.md`.
-2. **Why a 32-bit accumulator?** Derive the bound: `8 * 128 * 128 = 131072 <
-   2^18`; thousands of groups fit comfortably in INT32. Width proof in the
-   same document.
-3. **What does `+ 2^15` do before `>>> 16`?** Round-to-nearest instead of
-   floor. Truncation adds a systematic -0.5 LSB bias per layer. Show the
-   four-row table in `fixed_point_design.md`.
-4. **Why saturate only once?** Intermediate clipping is irreversible and would
-   be amplified by the next layer's scale. `sat_flag` is reported, not hidden.
-5. **Why `r32` instead of a shift amount?** `1 << shamt` only represents powers
-   of two; a 16-bit runtime scale fits arbitrary per-layer scales. Cost: one
-   multiplier per group, shared by all 8 lanes.
-6. **How does the coprocessor interface work?** req/rsp handshake, config and
-   operands separated from the compute command, and illegal sequences rejected
-   with an error response. Stress that this is NICE-*style*, not official NICE.
-7. **How do you keep RTL and the software model consistent?** One written
-   integer contract; Python exhaustive self-test first; deterministic vectors
-   with sha256; independent golden recomputation; RTL dumps re-checked by a
-   separate scoreboard; a mutation test proves the checker can fail.
-8. **How did you reduce area?** As a causal chain: narrower scale field ->
-   narrower multiplier and operand registers -> shorter path / fewer cells.
-   Never "we changed a tool option". Note that this repository itself has no
-   PPA numbers.
+   cost; the premise is that quantisation error stays inside the layer budget.
+   `docs/fixed_point_design.md`.
+2. **Why a 32-bit accumulator?** `8 * 128 * 128 = 131072 < 2^18`; thousands of
+   groups fit comfortably, so no intermediate clipping.
+3. **What does `+2^15` do before `>>> 16`?** Round-to-nearest with ties to
+   +inf; truncation would inject a systematic -0.5 LSB bias per layer.
+   `docs/quantization_error_analysis.md`.
+4. **Why saturate only once?** Intermediate clipping is irreversible and is
+   amplified by the next layer's scale. `sat_flag` is reported.
+5. **Why a real `r32` multiplier?** `1 << shamt` only represents powers of two.
+   Cost: one multiplier per group, shared by 8 lanes. See the trade-off table
+   in `docs/design_tradeoffs.md`.
+6. **How does backpressure work, and can it deadlock?** Fire-on-`ready && valid`,
+   registered output, `valid` never depends combinationally on `ready`;
+   structural no-loop argument and latency/throughput in
+   `docs/timing_handshake.md`.
+7. **How do you keep RTL, model and netlist consistent?** One written integer
+   contract; exhaustive Python self-test; deterministic vectors with sha256;
+   independent golden recomputation; dumps re-read by a separate scoreboard;
+   mutation tests; then a synthesised netlist replayed with a bit-exact
+   RTL-vs-gate ACTUAL comparison.
+8. **Is this an ASIC tapeout / do you have PPA?** No. Generic cells only, no
+   PDK, no STA, no um^2, no Fmax, no power. Cell counts are relative complexity
+   indicators for this clean-room demo. The 42-question set with "do not say"
+   lines is `docs/interview_qa.md`.
 
----
+### Two trap answers
 
-## Two answers to have ready (they are traps)
+- *"Did you verify the whole chip?"* -> No. This repository verifies six
+  testbenches and five netlists. The team project reached module-level
+  continuous inference and SoC-level sampling. `docs/case_study.md`.
+- *"What was the power?"* -> 0.462 mW was accelerator-and-interface local in
+  the team project, not full-chip. This repository claims no power number.
 
-- *"Did you verify the whole chip?"* -> No. Module-level 12-layer continuous
-  inference passed; SoC level was **sampled**. See `docs/case_study.md`.
-- *"What was the power?"* -> 0.462 mW was **accelerator-and-interface local**,
-  not full-chip. The preliminary round did not require full-chip power.
+### One honest caveat to volunteer
 
-## One honest caveat to volunteer
-
-The six Verilog testbenches are run by CI on Linux, not on the author's Windows
-host. Say so before being asked; it reads as rigour, not as a gap.
+RTL simulation, synthesis and gate-level replay are executed on Linux in CI,
+not on the author's Windows host; the committed local snapshots are labelled
+`SKIPPED` / not authoritative. Say so before being asked.

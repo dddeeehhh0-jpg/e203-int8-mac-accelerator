@@ -5,7 +5,7 @@
 > One number, one evidence file. A testbench never computes its own golden
 > value, and a checker is not trusted until it has been shown to catch a bug.
 
-The chain has four independent layers:
+The chain has five independent layers:
 
 1. **Model self-test** — `model/int8_ref.py` checks the arithmetic contract on
    exhaustive and boundary inputs (all 65,536 signed 8x8 products, rounding
@@ -23,6 +23,11 @@ The chain has four independent layers:
    `results/dump_*.csv`; `model/check_results.py` re-reads those dumps and
    reports the first mismatch with its index. A bug in a testbench's own
    comparison cannot hide, because the scoreboard is a separate program.
+5. **RTL vs synthesised netlist** — `syn/run_synth.py` produces flattened
+   generic netlists, and `run_gatelevel.py` runs an RTL reference and the
+   gate-level netlist on the *same* vectors, applying five mandatory checks
+   per TB (section 4a). This is functional equivalence on a finite vector
+   set, not formal equivalence.
 
 The scoreboard itself is mutation-tested: `--selftest` injects one wrong value
 into a synthetic dump and asserts that exactly one mismatch is reported at the
@@ -64,10 +69,12 @@ calls `$finish`. `run_regress.py` compiles all RTL files explicitly with
 | Check | Tool | What it catches |
 |---|---|---|
 | `model/rtl_lint.py` | stdlib | missing `default_nettype` guards, unbalanced `module`/`generate`/brackets, filename != module name, instances of undefined modules |
-| `model/verilog_parse_check.py` | pyverilog (optional) | a **real LALR parse** of all 14 `.v` files; useful on hosts without a simulator |
+| `model/verilog_parse_check.py` | pyverilog (optional) | a **real LALR parse** of all 15 `.v` files (including `syn/generic_cells.v`); useful on hosts without a simulator |
+| `syn/run_synth.py` | Yosys 0.70 | `hierarchy -check`, `flatten`, `check`, `stat`; 0 latches, 0 connectivity problems, per-netlist sha256 |
 
-Neither is a substitute for elaboration or simulation. `results/lint_report.txt`
-and `results/parse_report.txt` say so in plain text.
+Neither static check is a substitute for elaboration or simulation.
+`results/lint_report.txt`, `results/parse_report.txt` and
+`results/synthesis_report.md` say so in plain text.
 
 ---
 
@@ -103,22 +110,57 @@ PASS    manifest.csv sha256                 points=8
 
 **The last line is important.** `iverilog`/`vvp` could not be installed on
 that host (the OS security policy blocked the installer), so the six Verilog
-testbenches were **not executed locally**. `.github/workflows/ci.yml` installs
-`iverilog` on `ubuntu-latest` and runs `python3 run_regress.py --strict`,
-which fails if simulation is skipped.
+testbenches and the gate-level replay were **not executed locally**. The
+committed `results/regression_summary.md` and `results/gatelevel_report.md`
+are that host's snapshots, both labelled `SKIPPED` / not authoritative. The
+**real Yosys synthesis** did run on this host (`results/synthesis_report.md`).
 
-That job is now **green**: run `43226906536` on commit `a8639b0` executed all
-six testbenches under Icarus Verilog 12.0; all six printed `RESULT ... PASS`
-and the independent scoreboard reported 0 mismatches on all six dumps
-(88,048 points in total). The first run (`43226072305`) failed for the
-protocol reason described in section 1; the fix was in the checker, not in the
-RTL. Logs, artifact contents and both commit hashes are recorded in
+`.github/workflows/ci.yml` runs three mandatory `--strict` steps on
+`ubuntu-latest` (Icarus Verilog 12.0 + pinned Yosys 0.70 + pyverilog):
+
+```
+python3 run_regress.py --strict        # 6 TBs + scoreboard
+python3 syn/run_synth.py --strict      # real generic-cell synthesis
+python3 run_gatelevel.py --strict      # 5 netlists replayed
+```
+
+Any skipped step fails the job. Run `43226906536` (commit `a8639b0`) executed
+all six testbenches: all six printed `RESULT ... PASS` and the independent
+scoreboard reported 0 mismatches on all six dumps (88,048 points in total).
+The first run (`43226072305`) failed for the protocol reason described in
+section 1; the fix was in the checker, not in the RTL. Later runs added
+synthesis and gate-level replay; two further CI failures (netlist hierarchy /
+parameter overrides, and gate-replay simulation cost) were fixed from the real
+logs. All run IDs, commit hashes and logs are in
 [`results/ci_evidence.md`](../results/ci_evidence.md).
 
-`results/regression_summary.md` is regenerated on every run and records the
-status of whichever host ran it. The committed copy is the author's Windows
-snapshot (`SKIPPED`); the CI copy is uploaded as an artifact. Nothing is
-hard-coded as "passed".
+---
+
+## 4a. Gate-level replay, precisely
+
+Two simulations per TB on the **same** vector file, in isolated directories:
+
+| # | Check | Must be |
+|---|---|---|
+| 1 | RTL reference prints `RESULT <tb> PASS` | true |
+| 2 | gate-level netlist prints `RESULT <tb> PASS` | true |
+| 3 | independent scoreboard on the RTL dump | 0 errors |
+| 4 | independent scoreboard on the gate dump | 0 errors |
+| 5 | RTL ACTUAL column == gate ACTUAL column, row by row | 0 differences |
+
+`run_gatelevel.py` generates a TB copy with the DUT parameter override removed
+(after asserting the override equals the synthesised default), because a
+flattened netlist has no parameters. A zero-delay netlist expands the 32x16
+multiplier into thousands of gates, so the gate-level requant sweep uses a
+**204-point boundary subset** (12 representative `r32` x all 17 `acc` edges);
+the full 17,459-point sweep remains in the RTL regression. The TBs hard-code
+their loop bound in `N_VEC`, so the generated copies for **both** runs are
+patched to the reduced count; `patch_vec_count()` first verifies that the
+original bound equals the full corpus size and fails loudly otherwise. A short
+vector file therefore cannot silently produce a false PASS. This is an
+equivalence experiment, not a second full regression, and
+`results/gatelevel_report.md` records the reduced point count. `tb_soc_stub`
+is excluded: its behavioural SRAM and host FSM are not synthesised.
 
 ---
 
@@ -126,11 +168,14 @@ hard-coded as "passed".
 
 - **No coverage percentage.** A functional-corpus count is not code coverage;
   without a commercial coverage tool the honest answer is "not measured".
-- **No formal proof.** There is no assertion-based formal run or equivalence
-  check against a netlist in this repository.
-- **No gate-level replay.** That belongs to the team project described in
-  `docs/case_study.md`, not here.
-- **No PPA numbers from this repository.** `syn/` is logic-level only.
+  `docs/functional_coverage.md` is a scenario checklist only.
+- **No formal proof.** No SVA, no property checking, no formal RTL-vs-netlist
+  equivalence. Gate-level replay is simulation on a finite vector set.
+- **No PDK PPA from this repository.** Generic cell counts are not um^2, Fmax
+  or power; there is no STA, no SDC, no timing closure.
+- **No full-chip or silicon verification.** Six testbenches plus a gate-level
+  replay of five small modules is not full-chip verification. The contest
+  numbers in `docs/case_study.md` belong to a different team project.
 
 ---
 

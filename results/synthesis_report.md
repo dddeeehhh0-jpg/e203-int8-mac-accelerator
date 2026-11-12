@@ -1,6 +1,6 @@
 # Logic-level synthesis report
 
-Generated: 2026-11-12 14:02:08 UTC
+Generated: 2026-11-12 14:30:31 UTC
 Tool: Yosys 0.70
 Command: `python3 syn/run_synth.py`
 Flow: `read_verilog -sv` -> `hierarchy -check` -> `proc` -> `opt` -> `techmap` -> `opt` -> `setundef -zero` -> `opt` -> `check` -> `stat` -> `write_verilog -noattr -noexpr -nohex`
