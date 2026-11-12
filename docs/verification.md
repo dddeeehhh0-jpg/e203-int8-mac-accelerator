@@ -28,6 +28,18 @@ The scoreboard itself is mutation-tested: `--selftest` injects one wrong value
 into a synthetic dump and asserts that exactly one mismatch is reported at the
 correct index. A checker that always prints PASS is worthless.
 
+**Streaming dumps follow the handshake protocol, not blind equality.**
+`tb_top_stream` packs `{valid, y[7:0], sat}` into one 10-bit word. While
+`valid == 0` the payload is a don't-care: `int8_mac_top` keeps the previous
+data register instead of clearing it, so idle, stall, reset and drain beats
+can legitimately carry a stale `y`. The scoreboard therefore always compares
+the valid bit and compares the full word on valid cycles, but ignores the
+held payload on idle cycles. This is not a way to hide a bug: `--selftest`
+also injects a wrong payload on a valid cycle and a wrongly asserted valid
+bit, and asserts that both are still reported. The rule was added after the
+first real CI run flagged 9 false mismatches, all of them idle cycles with
+`valid = 0` on both expected and actual.
+
 ---
 
 ## 2. Testbenches

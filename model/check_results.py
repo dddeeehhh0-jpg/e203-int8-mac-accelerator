@@ -161,6 +161,23 @@ def verify_vectors() -> list[tuple[str, int, str]]:
 
 
 def check_one_dump(path: str) -> dict:
+    """Compare one RTL dump against its expected word.
+
+    Most dumps are plain equal-width vectors, so ``expected == actual``.
+
+    ``dump_top_stream.csv`` is different: its word packs
+    ``{valid, y[7:0], sat}`` into 10 bits. The streaming interface defines
+    the payload as don't-care while ``valid == 0`` -- int8_mac_top keeps the
+    previous data register instead of spending logic to clear it, and
+    tb_top_stream deliberately skips y/sat on those cycles. Comparing the
+    held bits would report false failures on idle/stall/reset/drain beats.
+
+    The scoreboard therefore follows the protocol: the valid bit is ALWAYS
+    compared, and on valid cycles the FULL 10-bit word is compared. A wrong
+    result, a wrong saturation flag or a wrongly asserted valid still fails
+    the build. See docs/verification.md section 1.
+    """
+    is_stream = "top_stream" in os.path.basename(path)
     errors = 0
     first = None
     n = 0
@@ -175,7 +192,13 @@ def check_one_dump(path: str) -> dict:
                 if first is None:
                     first = (n, "bad row", row)
                 continue
-            if exp != act:
+            if is_stream:
+                exp_v = (exp >> 9) & 1
+                act_v = (act >> 9) & 1
+                ok = (exp_v == act_v) and (exp_v == 0 or exp == act)
+            else:
+                ok = exp == act
+            if not ok:
                 errors += 1
                 if first is None:
                     first = (n, f"expected={exp:x} actual={act:x}", row)
@@ -200,7 +223,22 @@ def selftest() -> bool:
         caught = r["errors"] == 1 and r["first"][0] == 2
         print(f"checker mutation test: {'PASS' if caught else 'FAIL'} "
               f"(errors={r['errors']}, first={r['first'][0] if r['first'] else None})")
-        return caught
+
+        # The streaming rule must tolerate held payload ONLY on idle cycles.
+        # Verify it still catches (a) a bad payload on a valid cycle and
+        # (b) a wrongly asserted valid bit. Otherwise the relaxation above
+        # would be a way to hide a real RTL bug.
+        sp = os.path.join(tmp, "dump_top_stream_selftest.csv")
+        with open(sp, "w", encoding="ascii", newline="") as fh:
+            fh.write("test,index,expected,actual\n")
+            fh.write("top_stream,0,000,1fc\n")   # idle: held payload, tolerated
+            fh.write("top_stream,1,200,202\n")   # valid: wrong y, must fail
+            fh.write("top_stream,2,000,200\n")   # valid bit wrong, must fail
+        rs = check_one_dump(sp)
+        caught_s = rs["errors"] == 2 and rs["first"][0] == 2
+        print(f"streaming protocol mutation test: {'PASS' if caught_s else 'FAIL'} "
+              f"(errors={rs['errors']}, first={rs['first'][0] if rs['first'] else None})")
+        return caught and caught_s
 
 
 def main() -> int:

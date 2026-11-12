@@ -1,6 +1,6 @@
 # Regression summary
 
-- Generated: `2026-11-12T18:03:35+08:00`
+- Generated: `2026-11-12T21:23:17+08:00`
 - Platform: `Windows 11`, Python `3.13.14`
 - Simulator: `not installed on this host`
 - Command: `python3 run_regress.py` (or `make regress`)
