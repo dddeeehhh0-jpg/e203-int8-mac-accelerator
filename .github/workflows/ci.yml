@@ -1,0 +1,38 @@
+name: regress
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rtl-regress:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Icarus Verilog and optional grammar checker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends iverilog
+          iverilog -V | head -1
+          python3 -m pip install --quiet pyverilog
+
+      - name: Full regression (RTL simulation mandatory)
+        run: python3 run_regress.py --strict
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-evidence
+          path: |
+            results/
+            vectors/gen/manifest.csv
+          if-no-files-found: warn

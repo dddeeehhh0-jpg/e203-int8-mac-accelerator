@@ -1,0 +1,22 @@
+# Verilog grammar check (pyverilog, Verilog-2001 subset)
+
+[ OK ] rtl/mac/acc_stage.v
+[ OK ] rtl/mac/mac_array.v
+[ OK ] rtl/mac/mac_pe.v
+[ OK ] rtl/mac/requant.v
+[ OK ] rtl/memory/sram_beh.v
+[ OK ] rtl/soc_stub/mac_soc_stub.v
+[ OK ] rtl/top/int8_mac_top.v
+[ OK ] rtl/top/nice_adapter.v
+[ OK ] tb/tb_mac_array.v
+[ OK ] tb/tb_mac_pe.v
+[ OK ] tb/tb_nice_adapter.v
+[ OK ] tb/tb_requant.v
+[ OK ] tb/tb_soc_stub.v
+[ OK ] tb/tb_top_stream.v
+
+files   : 14
+failures: 0
+
+Scope: grammar only. Elaboration, width rules and simulation are
+checked by iverilog/vvp in `make regress` / CI.

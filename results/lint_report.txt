@@ -1,0 +1,25 @@
+# Structural lint report
+
+[ OK ] rtl/mac/acc_stage.v  module(s): acc_stage
+[ OK ] rtl/mac/mac_array.v  module(s): mac_array
+[ OK ] rtl/mac/mac_pe.v  module(s): mac_pe
+[ OK ] rtl/mac/requant.v  module(s): requant
+[ OK ] rtl/memory/sram_beh.v  module(s): sram_beh
+[ OK ] rtl/soc_stub/mac_soc_stub.v  module(s): mac_soc_stub
+[ OK ] rtl/top/int8_mac_top.v  module(s): int8_mac_top
+[ OK ] rtl/top/nice_adapter.v  module(s): nice_adapter
+[ OK ] tb/tb_mac_array.v  module(s): tb_mac_array
+[ OK ] tb/tb_mac_pe.v  module(s): tb_mac_pe
+[ OK ] tb/tb_nice_adapter.v  module(s): tb_nice_adapter
+[ OK ] tb/tb_requant.v  module(s): tb_requant
+[ OK ] tb/tb_soc_stub.v  module(s): tb_soc_stub
+[ OK ] tb/tb_top_stream.v  module(s): tb_top_stream
+
+files   : 14
+modules : 14
+errors  : 0
+warnings: 0
+
+Note: structural only. A real compile/simulation is performed by
+`python3 run_regress.py` / `make regress` when iverilog is present,
+and unconditionally by the GitHub Actions CI job on ubuntu-latest.

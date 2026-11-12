@@ -1,0 +1,45 @@
+# ==========================================================================
+# Logic-level Yosys script - NO PDK, NO standard-cell library, NO PPA CLAIM
+#
+# Run from the repository root:   yosys -s syn/synth_yosys.ys
+#
+# What this produces: a generic gate-level structure ($add/$mul/$mux/$dff)
+# and a `stat` cell-count table. Cell counts are ONLY comparable between two
+# runs of THIS script on THIS RTL. They are NOT area in um^2, NOT a clock
+# period, and NOT comparable with a synthesised PDK netlist.
+#
+# See docs/synthesis_analysis.md before quoting any number from the output.
+# ==========================================================================
+
+read_verilog -sv rtl/mac/mac_pe.v
+read_verilog -sv rtl/mac/mac_array.v
+read_verilog -sv rtl/mac/acc_stage.v
+read_verilog -sv rtl/mac/requant.v
+read_verilog -sv rtl/top/int8_mac_top.v
+
+hierarchy -check -top int8_mac_top
+
+proc
+opt
+techmap
+opt
+
+stat
+
+# Structural dumps for inspection (not deliverables, not a netlist).
+write_rtlil syn/out/int8_mac_top.il
+write_json  syn/out/int8_mac_top.json
+
+# Optional: repeat for the command-path integration.
+design -reset
+read_verilog -sv rtl/mac/mac_pe.v
+read_verilog -sv rtl/mac/mac_array.v
+read_verilog -sv rtl/mac/acc_stage.v
+read_verilog -sv rtl/mac/requant.v
+read_verilog -sv rtl/top/nice_adapter.v
+hierarchy -check -top nice_adapter
+proc
+opt
+techmap
+opt
+stat
