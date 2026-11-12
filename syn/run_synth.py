@@ -99,7 +99,12 @@ def synthesize(yosys: list[str]) -> tuple[list[dict], str, list[str]]:
         script = (
             commands
             + f"; hierarchy -check -top {top}"
-            + "; proc; opt; techmap; opt; setundef -zero; opt"
+            + "; proc; opt; techmap; opt"
+            # Flatten so the netlist is ONE module with the DUT's own name and
+            # ports. Without this, Yosys emits a hierarchy whose first module
+            # is a `$paramod...` child, and the gate-level testbench would have
+            # no plain `<top>` module to instantiate.
+            + "; flatten; opt; setundef -zero; opt"
             + "; check; stat"
             + f"; write_verilog -noattr -noexpr -nohex {net.as_posix()}"
         )

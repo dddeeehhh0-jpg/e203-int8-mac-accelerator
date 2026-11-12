@@ -54,6 +54,49 @@ TARGETS = {
 
 GLDIR = ROOT / "build" / "gl_run"
 
+# Parameter values the RTL was synthesised with. A structural netlist has NO
+# parameters (Yosys has already specialised them), so the replay TB must drop
+# its `#(.PARAM(v))` override. We PARSE that override and assert it equals the
+# synthesised value instead of silently discarding it - otherwise a TB that
+# changed a width would appear to pass against the wrong hardware.
+DEFAULTS = {
+    "mac_pe":       {"IN_W": 8},
+    "mac_array":    {"N_LANE": 8, "IN_W": 8, "ACC_W": 32},
+    "requant":      {"ACC_W": 32, "R32_W": 16, "SHIFT": 16},
+    "int8_mac_top": {"N_LANE": 8, "IN_W": 8, "ACC_W": 32, "R32_W": 16,
+                     "BIAS_W": 16},
+    "nice_adapter": {"N_LANE": 8, "IN_W": 8, "ACC_W": 32, "R32_W": 16},
+}
+
+
+def strip_dut_params(text: str, top: str):
+    """Return (tb_source_without_override, overrides_dict, error)."""
+    m = re.search(r"(?m)^(\s*)" + re.escape(top) + r"\s+#\(", text)
+    if not m:
+        return text, {}, f"{top}: no parameter override found in TB"
+    open_paren = m.end() - 1
+    depth, i = 0, open_paren
+    while i < len(text):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    else:
+        return text, {}, f"{top}: unbalanced '#(...)' in TB"
+    block = text[open_paren + 1:i]
+    overrides = {n: int(v, 0) for n, v in
+                 re.findall(r"\.([A-Za-z_]\w*)\s*\(\s*([^()]+?)\s*\)", block)}
+    bad = {n: (v, DEFAULTS[top].get(n)) for n, v in overrides.items()
+           if DEFAULTS[top].get(n) != v}
+    if bad:
+        return text, overrides, f"{top}: TB overrides differ from synthesised "
+        f"defaults: {bad}"
+    hash_pos = m.end() - 2
+    return text[:hash_pos] + text[i + 1:], overrides, None
+
 
 def find_sim():
     return shutil.which("iverilog"), shutil.which("vvp")
@@ -125,19 +168,43 @@ def main() -> int:
         if f.is_file():
             shutil.copy2(f, GLDIR / "vectors" / "gen" / f.name)
 
+    (GLDIR / "tb_gl").mkdir(parents=True, exist_ok=True)
     rows, failed = [], []
     for tb, (top, dump) in TARGETS.items():
         net = ROOT / "syn" / "out" / f"{top}_net.v"
         prims = ROOT / "syn" / "generic_cells.v"
-        tbf = ROOT / "tb" / f"{tb}.v"
+
+        # A flattened Yosys netlist has no parameters. Make a TB copy whose
+        # DUT instantiation drops the override - but only after asserting the
+        # override equals the value the netlist was synthesised with.
+        tb_src, overrides, err = strip_dut_params(
+            (ROOT / "tb" / f"{tb}.v").read_text(encoding="utf-8"), top)
+        if err:
+            print("FAIL  " + err)
+            failed.append(err)
+            rows.append((tb, "PARAM_MISMATCH", 0, -1, -1, err))
+            continue
+        net_text = net.read_text(encoding="utf-8")
+        if f"module {top}(" not in net_text:
+            e = f"{tb}: netlist has no plain top module '{top}' " \
+                "(run_synth.py must flatten)"
+            print("FAIL  " + e)
+            failed.append(e)
+            rows.append((tb, "NO_TOP", 0, -1, -1, e))
+            continue
+
+        tbf = GLDIR / "tb_gl" / f"{tb}.v"
+        tbf.write_text(tb_src, encoding="utf-8")
         exe = GLDIR / f"{tb}_gl.vvp"
         comp = subprocess.run(
             [iverilog, "-g2012", "-o", str(exe), "-s", tb,
              str(tbf), str(net), str(prims)],
             cwd=ROOT, capture_output=True, text=True)
         if comp.returncode != 0:
+            detail = (comp.stderr or comp.stdout).strip()[:600]
+            print(f"FAIL  iverilog compile {tb}: {detail}")
             failed.append(f"{tb}: iverilog compile failed")
-            rows.append((tb, "COMPILE_FAIL", 0, -1, -1, comp.stderr.strip()[:200]))
+            rows.append((tb, "COMPILE_FAIL", 0, -1, -1, detail[:200]))
             continue
         run = subprocess.run([vvp, exe.name], cwd=GLDIR,
                             capture_output=True, text=True, timeout=300)
@@ -201,6 +268,18 @@ def main() -> int:
         "Gate-level dumps: `results/gl_dump_*.csv`; raw simulator output: "
         "`results/gl_tb_*.log` (build products, gitignored; uploaded as CI "
         "artifacts).",
+        "",
+        "The netlists are **flattened** (`syn/run_synth.py`), so each is one "
+        "module named exactly like the DUT. The replay TB is a generated copy "
+        "with the DUT's `#(.PARAM(v))` override removed, because a structural "
+        "netlist has no parameters; `run_gatelevel.py` parses the override "
+        "first and fails if it differs from the synthesised default width.",
+    ]
+    details = [r for r in rows if len(r) > 5 and r[5]]
+    if details:
+        lines += ["", "## Failure details", ""]
+        lines += [f"- `{r[0]}`: {r[5]}" for r in details]
+    lines += [
         "",
         "## Status",
         "",

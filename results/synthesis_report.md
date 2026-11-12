@@ -1,6 +1,6 @@
 # Logic-level synthesis report
 
-Generated: 2026-11-12 13:55:47 UTC
+Generated: 2026-11-12 14:02:08 UTC
 Tool: Yosys 0.70
 Command: `python3 syn/run_synth.py`
 Flow: `read_verilog -sv` -> `hierarchy -check` -> `proc` -> `opt` -> `techmap` -> `opt` -> `setundef -zero` -> `opt` -> `check` -> `stat` -> `write_verilog -noattr -noexpr -nohex`
@@ -19,22 +19,22 @@ Flow: `read_verilog -sv` -> `hierarchy -check` -> `proc` -> `opt` -> `techmap` -
 | Top | Testbench for gate-level replay | Total generic cells | Sequential bits (`$_DFF*`) | Netlist sha256 (12) |
 |---|---|---:|---:|---|
 | `mac_pe` | `tb_mac_pe` | 456 | 0 | `5328e36ad792` |
-| `mac_array` | `tb_mac_array` | 4928 | 0 | `dac24501dc49` |
+| `mac_array` | `tb_mac_array` | 4928 | 0 | `797d6a8a1a8f` |
 | `acc_stage` | (leaf, synthesis-only) | 338 | 33 | `8832d896d863` |
 | `requant` | `tb_requant` | 3856 | 11 | `a94f58f9d1a9` |
-| `int8_mac_top` | `tb_top_stream` | 9700 | 88 | `50772fe4007d` |
-| `nice_adapter` | `tb_nice_adapter` | 9284 | 195 | `850940965e41` |
+| `int8_mac_top` | `tb_top_stream` | 9479 | 88 | `1167c6f9fe82` |
+| `nice_adapter` | `tb_nice_adapter` | 9268 | 184 | `1d5d14d0c092` |
 
 ### Generic-cell breakdown
 
 | Top | `$_AND_` | `$_DFFE_PN0N_` | `$_DFFE_PN0P_` | `$_DFFE_PN1P_` | `$_MUX_` | `$_NOT_` | `$_OR_` | `$_XOR_` |
 |---|---|---|---|---|---|---|---|---|
 | `mac_pe` | 222 | 0 | 0 | 0 | 0 | 8 | 70 | 156 |
-| `mac_array` | 793 | 0 | 0 | 0 | 0 | 8 | 402 | 533 |
+| `mac_array` | 2347 | 0 | 0 | 0 | 0 | 64 | 892 | 1625 |
 | `acc_stage` | 115 | 0 | 33 | 0 | 66 | 0 | 59 | 65 |
 | `requant` | 1956 | 2 | 9 | 0 | 17 | 33 | 583 | 1256 |
-| `int8_mac_top` | 3083 | 2 | 84 | 2 | 164 | 44 | 1149 | 1980 |
-| `nice_adapter` | 2871 | 2 | 192 | 1 | 46 | 58 | 1070 | 1852 |
+| `int8_mac_top` | 4532 | 2 | 84 | 2 | 164 | 99 | 1587 | 3009 |
+| `nice_adapter` | 4424 | 0 | 183 | 1 | 45 | 112 | 1559 | 2944 |
 
 - **Latches: 0** (required: 0 - fully synchronous design).
 - Undefined primitives: 0 (required: 0).
