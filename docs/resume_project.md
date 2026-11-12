@@ -13,8 +13,9 @@ Hard red lines (from `docs/PUBLICATION_AUDIT.md` and `docs/interview_qa.md`):
 - Generic-cell counts are **not** area in um^2, **not** Fmax, **not** power.
 - Gate-level replay here is functional equivalence on a finite vector set,
   not formal equivalence and not timing closure.
-- 2.9975% / 600 samples / 7,945.53 um^2 / +1.59 ns / 0.462 mW belong to the
-  **team project**. 0.462 mW is accelerator-local, not chip power.
+- The team project's accuracy / area / timing / power figures belong to the
+  **team project** (exact values only in `docs/case_study.md`); its power
+  figure is accelerator-local, not chip power.
 
 ---
 
@@ -80,8 +81,8 @@ reference. Keep the scope qualifiers attached:
   the fixed-point scheme, gate-level replay and synthesis flow.
 - Module-level 12-layer continuous inference passed; SoC level was **sampled**,
   not "full-chip verification passed".
-- 600 samples were **team-selected**; the organiser's evaluation list is not
-  published. Never say "passed the organiser's evaluation".
+- The validation set was **team-selected**; the organiser's evaluation list
+  is not published. Never say "passed the organiser's evaluation".
 - Any power figure is **accelerator-and-interface local**, not chip power; the
   preliminary round did not require full-chip power.
 
@@ -121,8 +122,9 @@ reference. Keep the scope qualifiers attached:
 - *"Did you verify the whole chip?"* -> No. This repository verifies six
   testbenches and five netlists. The team project reached module-level
   continuous inference and SoC-level sampling. `docs/case_study.md`.
-- *"What was the power?"* -> 0.462 mW was accelerator-and-interface local in
-  the team project, not full-chip. This repository claims no power number.
+- *"What was the power?"* -> the team project's figure was
+  accelerator-and-interface local, not full-chip. This repository claims no
+  power number at all.
 
 ### One honest caveat to volunteer
 

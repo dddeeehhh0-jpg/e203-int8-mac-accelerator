@@ -88,7 +88,7 @@ never committed files.
 | 6/6 TB PASS, 88,048 dump points, 0 mismatches | GitHub Actions runs `43226906536` (first RTL green) and `43238295802` (latest full-chain green), Icarus Verilog 12.0 | `results/ci_evidence.md`, README |
 | 6 synthesised tops, 0 latches, generic cell counts, sha256 manifest | this host's real Yosys 0.70 run | `results/synthesis_report.md` - relative complexity only |
 | 5 replayed netlists, 5 checks each, 204-point requant boundary subset, 0 RTL-vs-gate differences | GitHub Actions run `43238295802` | `results/gatelevel_report.md`, `results/ci_evidence.md`, README |
-| 2.9975%, 600 samples, 7,945.53 um^2, +1.59 ns, 0.462 mW, 861,614 lines | **team contest project, internal records** | `docs/case_study.md` only, always with the scope qualifiers |
+| Team-project accuracy / area / timing / power / gate-level line-count figures (exact values deliberately not reproduced here) | **team contest project, internal records** | `docs/case_study.md` only, always with the scope qualifiers |
 | Any area/Fmax/power in um^2, MHz or mW for *this* repository | **does not exist** | must never appear |
 
 ## 6. Desensitisation record
@@ -107,9 +107,9 @@ never committed files.
    own code.
 2. Do not write "full-chip verification passed" - only module-level continuous
    inference and SoC-level sampling.
-3. Do not write "0.462 mW is the chip power" - it is accelerator-local.
-4. Do not write "passed the organiser's evaluation" - the 600-sample set was
-   team-selected.
+3. Do not present the accelerator-local power figure as chip power.
+4. Do not write "passed the organiser's evaluation" - the self-selected
+   validation set was team-chosen, not the organiser's list.
 5. Do not quote a coverage percentage or a PPA result for this repository.
 
 ## 8. Pre-publish checklist

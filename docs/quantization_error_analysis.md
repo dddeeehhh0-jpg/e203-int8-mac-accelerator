@@ -151,9 +151,9 @@ are all covered (see `docs/functional_coverage.md`).
   most ~0.5 LSB of rounding error, but those errors are amplified by the next
   layer's weights. Bounding the accumulated error requires a dataset and a
   statistical argument, which this clean-room demo does not have.
-- **No contest numbers.** The 600-sample validation results, the 3% threshold
-  discussion, the per-layer `r32` lists and the 0.462 mW local power figure
-  belong to a *different* team project and appear only (labelled, scoped) in
+- **No contest numbers.** The team project's validation results, threshold
+  discussion, per-layer scale lists and local power figure belong to a
+  *different* project and appear only (labelled, scoped) in
   `docs/case_study.md`. They must never be quoted as properties of this RTL.
 - **No floating-point reference.** The model is integer-only; there is no
   FP32 golden in this repository.

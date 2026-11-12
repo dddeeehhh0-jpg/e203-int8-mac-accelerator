@@ -8,8 +8,8 @@ is "not done / not claimed" - never improvise a number.**
 > Read `docs/project_limitations.md`, `docs/case_study.md` and
 > `docs/PUBLICATION_AUDIT.md` first. Three hard lines are repeated throughout:
 > (1) Python model verification is not RTL simulation; (2) module-level /
-> SoC-sample verification is not full-chip verification; (3) 0.462 mW is an
-> accelerator-local figure, not system power.
+> SoC-sample verification is not full-chip verification; (3) the team
+> project's power figure is accelerator-local, not system power.
 
 ---
 
@@ -23,9 +23,9 @@ is "not done / not claimed" - never improvise a number.**
 > synthesis and post-synthesis gate-level replay. Everything runs in CI on
 > Icarus Verilog + Yosys, and the README maps each claim to a file."
 
-**What NOT to say:** "I verified the whole chip", "it runs at 150 MHz", "area
-is X um^2", "0.462 mW total power", "NRMSE is 2.99%". None of those belongs
-to this repository.
+**What NOT to say:** "I verified the whole chip", or any team-project
+Fmax / area / power / NRMSE figure presented as a result of this repository.
+This project has no clock period, no area, no power and no accuracy metric.
 
 ---
 
@@ -263,8 +263,8 @@ licence/permission audit.
 
 **Q39. What exactly did you verify in the contest?** Only what's written there:
 module-level 12-layer continuous inference and SoC-level sampled verification;
-a self-selected 600-sample validation set (NOT the organiser's evaluation);
-0.462 mW as an **accelerator-local** figure. Never say "full-chip verified",
+a team-chosen validation set (NOT the organiser's evaluation); and an
+**accelerator-local** power figure. Never say "full-chip verified",
 "organiser evaluation passed" or "system power".
 
 **Q40. What's the biggest weakness of this portfolio repo?** No PPA (no PDK),

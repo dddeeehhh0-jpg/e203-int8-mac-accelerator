@@ -110,6 +110,6 @@ This repository is a **clean-room demo**: no E203 core, no official NICE RTL,
 no PDK, no netlist from the contest, no dataset, no weights. The contest
 experience is described only as method and scope in `docs/case_study.md`, with
 three hard limits: module-level / SoC-sample verification is not full-chip
-verification; 0.462 mW is an accelerator-local figure, not system power; and
-a self-selected 600-sample set is not the organiser's evaluation result.
-No optimisation, PPA or accuracy number from the team project is reused here.
+verification; the team project's power figure is accelerator-local, not system
+power; and a team-chosen validation set is not the organiser's evaluation
+result. No PPA or accuracy number from the team project is reused here.
