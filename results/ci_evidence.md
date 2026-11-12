@@ -3,10 +3,15 @@
 Repository: `dddeeehhh0-jpg/e203-int8-mac-accelerator` (private), branch `main`,
 workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
-**Latest green run: [43238295802](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/runs/43238295802)**
-on commit `1399057a00f756c0ab571546e33bd136c4dc9069`. All three `--strict`
-steps succeeded: full RTL regression, real Yosys synthesis, and post-synthesis
-gate-level replay of five flattened netlists.
+**Reference green run: [43238295802](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/runs/43238295802)**
+on commit `1399057a00f756c0ab571546e33bd136c4dc9069` — this is the run that
+introduced and validated the full chain. All three `--strict` steps succeeded:
+full RTL regression, real Yosys synthesis, and post-synthesis gate-level
+replay of five flattened netlists. Later commits are documentation-only and
+keep the same three steps green (e.g. run
+[43239632568](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/runs/43239632568));
+the Actions tab is the up-to-date list, so no "latest run" claim is frozen
+into this file.
 
 ---
 
