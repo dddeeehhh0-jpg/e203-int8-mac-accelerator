@@ -1,8 +1,8 @@
 # E203-Based INT8 MAC Accelerator (clean-room demo)
 
-[![regress](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml)
+**RTL Design · Fixed-Point Arithmetic · Functional Verification · Logic Synthesis**
 
-*The badge is visible to signed-in viewers while the repository is private.*
+[![regress](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml)
 
 A small, independently written INT8 MAC channel: 8 parallel signed multiply
 lanes, a 32-bit accumulator, `r32` requantization with round-to-nearest and a
@@ -10,6 +10,11 @@ single output saturation, plus a NICE-style command adapter and a minimal
 host FSM that runs a 12-layer feed-forward chain end to end. Every datapath
 rule has a bit-exact Python reference model, deterministic vectors and a
 self-checking Verilog testbench.
+
+This is a design-and-verification exercise: build a fixed-point datapath from
+scratch, then show with reproducible evidence exactly what has and has not been
+proved about it. There is no PDK, no STA, no coverage percentage and no PPA
+claim.
 
 > **This repository is not the contest project.** It contains no E203 core,
 > no official NICE RTL, no PDK, no vendor/contest netlist, no dataset and no
@@ -20,37 +25,19 @@ self-checking Verilog testbench.
 
 ---
 
-## Status
+## How to read this repository
 
-Read this first. "Done" always points at a file you can open.
+1. **What was designed and why** — [Why this design](#why-this-design),
+   [Architecture](#architecture), [Fixed-point contract](#fixed-point-contract).
+2. **How correctness is established** — [Verification](#verification),
+   [Synthesis and gate-level replay](#synthesis-and-gate-level-replay),
+   [Formal verification](#formal-verification).
+3. **What is deliberately not claimed** — [What is NOT included](#what-is-not-included)
+   and [docs/project_limitations.md](docs/project_limitations.md).
+4. **Evidence and interview prep** — [Evidence map](#evidence-map-find-any-claim-in-30-seconds),
+   [Evidence status](#evidence-status), [docs/interview_qa.md](docs/interview_qa.md).
 
-| Component | Status | Evidence |
-|---|---|---|
-| Bit-exact Python model | Done, 8 exhaustive self-checks | `model/int8_ref.py` |
-| Deterministic vector corpus | Done, 8 files with sha256 | `vectors/gen/manifest.csv` |
-| Independent golden recomputation | Done (88k+ points) | `model/check_results.py --verify-vectors` |
-| 8 RTL modules + cell models | Written, grammar-parsed **15/15** | `results/parse_report.txt` |
-| Structural lint | Done, 0 errors | `results/lint_report.txt` |
-| 6 self-checking testbenches | **PASS, 6/6** in real simulation (Icarus Verilog 12.0) | [`results/ci_evidence.md`](results/ci_evidence.md) |
-| Real logic-level synthesis | **Done** — Yosys 0.70, 6 flattened tops, 0 latches, 0 connectivity problems. **Generic cells only: no PDK, no PPA** | [`results/synthesis_report.md`](results/synthesis_report.md) |
-| Post-synthesis gate-level replay | **Done** — 5 netlists, RTL-vs-netlist bit-exact on a boundary subset | [`results/gatelevel_report.md`](results/gatelevel_report.md) |
-| CI regression on Linux | **Green** — run `43238295802`, 3 mandatory `--strict` steps (regress / synthesis / gate-level), 5/5 netlists bit-exact | [`results/ci_evidence.md`](results/ci_evidence.md), `.github/workflows/ci.yml` |
-| Design docs + interview Q&A | Done, 13 docs + 5 figures | `docs/` |
-
-**Honest caveat:** on the author's Windows host, `iverilog`/`vvp` could not be
-installed (the OS security policy blocked the installer), so **RTL simulation
-and gate-level replay were not run locally** — those local snapshots say
-`SKIPPED` and are explicitly labelled *not authoritative*. The Python model,
-vectors, golden recomputation, lint, grammar parse **and the real Yosys
-synthesis** did run on this host. The six testbenches, the synthesis and the
-netlist replay all execute on GitHub Actions (`ubuntu-latest`, Icarus Verilog
-12.0 + Yosys 0.70). Full per-TB results, run IDs, commit hashes and all three
-failed-then-fixed CI runs are recorded in
-[`results/ci_evidence.md`](results/ci_evidence.md).
-
-**Do not overclaim:** generic cell counts are NOT area in um^2, NOT Fmax and
-NOT power. Gate-level replay is functional equivalence on a finite vector set,
-not formal equivalence, not timing closure and not the contest chip.
+The design comes first; the status index is at the end of this file.
 
 ---
 
@@ -210,6 +197,33 @@ equivalence experiment, not a second full regression.
 
 ---
 
+## Formal verification
+
+[`formal/README.md`](formal/README.md) documents a separate SymbiYosys flow
+that adds two **scoped proofs** on top of the finite regressions, plus one
+negative control for each so the assertions are known to be able to fail.
+
+| Job | Object | Method | Result |
+|---|---|---|---|
+| `requant_comb` | `requant` combinational outputs | k-induction against an independently written 51-bit reference, over all 2^48 `(acc, r32)` pairs | PASS |
+| `stream_protocol` | `int8_mac_top` ready/valid FSM | k-induction on 6 safety properties: reset, backpressure, cfg priority, `m_last` gating, stalled-output stability, accumulator hold | PASS |
+| `requant_comb_bad` | rounding bias removed | BMC negative control | FAIL + VCD counterexample |
+| `stream_protocol_bad` | `s_ready` forced high | BMC negative control | FAIL + VCD counterexample |
+
+Run `python3 formal/run_formal.py --strict` (or `make formal`). CI runs the
+same command: a proof that fails, a mutation that unexpectedly passes, or a
+missing counterexample fails the workflow.
+
+**What this is not:** **not** RTL-vs-netlist formal equivalence, **not**
+full-chip verification, **not** a liveness/throughput proof and **not** a
+coverage number. The sequential proof assumes one initial reset and an
+abstracted (constant) data path; mid-stream reset is covered by
+`tb_top_stream` instead. Gate-level replay remains a 204-point boundary
+subset. Tool versions, commands, assumptions and source hashes are in
+[`results/formal_report.md`](results/formal_report.md).
+
+---
+
 ## Evidence map (find any claim in 30 seconds)
 
 | Claim | Open this file |
@@ -223,9 +237,48 @@ equivalence experiment, not a second full regression.
 | "the rounding bias is understood" | [docs/quantization_error_analysis.md](docs/quantization_error_analysis.md) |
 | "the design trade-offs are deliberate" | [docs/design_tradeoffs.md](docs/design_tradeoffs.md) |
 | "which scenarios are covered" | [docs/functional_coverage.md](docs/functional_coverage.md) |
+| "the rounding rule holds for every input" | [`results/formal_report.md`](results/formal_report.md) + [`formal/README.md`](formal/README.md) |
+| "the formal assertions can actually fail" | CI `formal-evidence` artifact (VCD counterexamples) |
 | "I can defend this in an interview" | [docs/interview_qa.md](docs/interview_qa.md) (42 questions) |
 | "nothing unauthorised is published" | [docs/PUBLICATION_AUDIT.md](docs/PUBLICATION_AUDIT.md) |
 | "what is deliberately NOT done" | [docs/project_limitations.md](docs/project_limitations.md) |
+
+---
+
+## Evidence status
+
+"Done" always points at a file you can open. This is an index; the sections
+above explain what each line actually proves.
+
+| Component | Status | Evidence |
+|---|---|---|
+| Bit-exact Python model | Done, 8 exhaustive self-checks | `model/int8_ref.py` |
+| Deterministic vector corpus | Done, 8 files with sha256 | `vectors/gen/manifest.csv` |
+| Independent golden recomputation | Done (88k+ points) | `model/check_results.py --verify-vectors` |
+| 8 RTL modules + cell models | Written, grammar-parsed **15/15** | `results/parse_report.txt` |
+| Structural lint | Done, 0 errors | `results/lint_report.txt` |
+| 6 self-checking testbenches | **PASS, 6/6** in real simulation (Icarus Verilog 12.0) | [`results/ci_evidence.md`](results/ci_evidence.md) |
+| Real logic-level synthesis | **Done** — Yosys 0.70, 6 flattened tops, 0 latches, 0 connectivity problems. **Generic cells only: no PDK, no PPA** | [`results/synthesis_report.md`](results/synthesis_report.md) |
+| Post-synthesis gate-level replay | **Done** — 5 netlists, RTL-vs-netlist bit-exact on a 204-point boundary subset | [`results/gatelevel_report.md`](results/gatelevel_report.md) |
+| Scoped formal proofs | **Done** — 2 k-induction proofs (1 combinational, 1 sequential) + 2 mutation counterexamples | [`results/formal_report.md`](results/formal_report.md), [`formal/README.md`](formal/README.md) |
+| CI on Linux | **Green** — `--strict` regress / synthesis / gate-level steps plus a mandatory `formal` job | [`results/ci_evidence.md`](results/ci_evidence.md), `.github/workflows/ci.yml` |
+| Design docs + interview Q&A | Done, 13 docs + formal README + 5 figures | `docs/`, `formal/README.md` |
+
+**Honest caveat:** on the author's Windows host, `iverilog`/`vvp` could not be
+installed (the OS security policy blocked the installer), so **RTL simulation
+and gate-level replay were not run locally** — those local snapshots say
+`SKIPPED` and are explicitly labelled *not authoritative*. The Python model,
+vectors, golden recomputation, lint, grammar parse, the real Yosys synthesis
+**and the formal proofs** did run on this host. All four evidence chains also
+execute on GitHub Actions (`ubuntu-latest`). Full per-TB results, run IDs and
+commit hashes are recorded in [`results/ci_evidence.md`](results/ci_evidence.md).
+
+**Do not overclaim:** generic cell counts are NOT area in um^2, NOT Fmax and
+NOT power. Gate-level replay is functional equivalence on a finite vector set,
+not formal equivalence, not timing closure and not the contest chip. The two
+formal proofs are scoped RTL properties — **not** RTL-vs-netlist equivalence,
+**not** full-chip verification, **not** liveness/throughput and **not** a
+coverage number. A successful synthesis run is not timing closure.
 
 ---
 
@@ -244,6 +297,10 @@ equivalence experiment, not a second full regression.
 4. **No contest source code, no screenshots, no server paths.** The related
    team project is described only as method and conclusions in
    [docs/case_study.md](docs/case_study.md).
+5. **No RTL-vs-netlist formal equivalence, no full-chip formal proof.** The
+   formal work proves two scoped properties of this repository's RTL under the
+   assumptions in [`formal/README.md`](formal/README.md). Gate-level replay is
+   still a finite 204-point subset, not an equivalence proof.
 
 ---
 
@@ -260,8 +317,14 @@ python3 run_regress.py --strict          # 6 TBs + scoreboard (needs iverilog)
 python3 syn/run_synth.py --strict        # real generic-cell synthesis
 python3 run_gatelevel.py --strict        # 5 netlists replayed (needs iverilog)
 make ci                                 # same three steps
+make formal                             # SVA + SymbiYosys proofs (needs z3)
 make full                               # same, non-strict
 ```
+
+`make formal` additionally needs an SMT solver (`sudo apt-get install -y z3`)
+and the `yowasp-yosys` package installed above. It generates its own `.sby`
+configs from the current RTL at run time; see
+[`formal/README.md`](formal/README.md).
 
 Host-side checks that need no simulator:
 
@@ -292,7 +355,8 @@ three steps really ran on Linux. `make help` lists every target.
 | `syn/` | `run_synth.py` (real generic mapping), `generic_cells.v` (hand-written primitives), `synth_yosys.ys`, DC template |
 | `run_gatelevel.py` | post-synthesis netlist replay with 5 mandatory checks per TB |
 | `docs/` | 13 design/verification/interview docs; `make_figures.py` regenerates the 5 PNGs |
-| `results/` | lint / parse / regression / synthesis / gate-level / CI-evidence reports |
+| `formal/` | SVA checkers, SymbiYosys driver, scope/limits README (run products in gitignored `formal/out/`) |
+| `results/` | lint / parse / regression / synthesis / gate-level / formal / CI-evidence reports |
 
 ### Design deep-dives (for interview prep)
 
@@ -319,5 +383,5 @@ README text was copied.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Replace the copyright holder with your own name
-before publishing.
+MIT, see [LICENSE](LICENSE). The generic holder "Project contributors" is
+used deliberately so the public repository carries no personal identity.

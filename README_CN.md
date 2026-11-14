@@ -1,13 +1,16 @@
 # 基于 E203 的 INT8 MAC 加速器（clean-room 演示工程）
 
-[![regress](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml)
+**RTL 设计 · 定点算术 · 功能验证 · 逻辑综合**
 
-*仓库为 Private 时，badge 仅登录用户可见。*
+[![regress](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/dddeeehhh0-jpg/e203-int8-mac-accelerator/actions/workflows/ci.yml)
 
 独立重写的小型 INT8 MAC 数据通路：8 路并行有符号乘法、32 位累加、`r32`
 再量化（四舍五入 + 单次输出饱和），另有一个 NICE 风格指令适配器，以及一个
 能跑通 12 层前馈链的最小宿主 FSM。每条数据通路规则都配有位精确 Python
 参考模型、可复现向量和自检 testbench。
+
+这是一个「设计 + 验证」工程：从零搭一条定点数据通路，再用可复现的证据说清
+**证明了什么、没证明什么**。没有 PDK、没有 STA、没有覆盖率百分比、没有 PPA。
 
 > **本仓库不是比赛工程**：不含 E203 核、官方 NICE RTL、PDK、厂商/比赛网表、
 > 数据集、权重、比赛源码与截图。仓库里唯一的网表是由本工程自己的 RTL
@@ -16,9 +19,14 @@
 
 英文主入口见 [README.md](README.md)。
 
+**建议阅读顺序**：先看「定点契约」与「验证」，再看「综合与门级回放」和
+「形式验证」，最后看「明确不包含」与 [docs/interview_qa.md](docs/interview_qa.md)。
+下面的状态表只是索引，不是结论本身。
+
+
 ---
 
-## 状态表（先看这个）
+## 状态表（索引）
 
 | 组件 | 状态 | 证据 |
 |---|---|---|
@@ -30,18 +38,23 @@
 | 6 个自检 testbench | **CI 真实仿真 6/6 全 PASS**（Icarus Verilog 12.0） | `results/ci_evidence.md` |
 | 真实逻辑级综合 | **已跑** — Yosys 0.70，6 个展平顶层，0 latch，0 连接问题。**仅 generic cells，无 PDK、无 PPA** | `results/synthesis_report.md` |
 | 综合后门级回放 | **已跑** — 5 个网表与 RTL 逐点一致 | `results/gatelevel_report.md` |
-| Linux CI 回归 | **全绿** — run `43238295802`，3 个 `--strict` 步骤：回归 / 综合 / 门级回放，5/5 网表与 RTL 逐点一致 | `results/ci_evidence.md`、`.github/workflows/ci.yml` |
-| 设计文档 + 面试手册 | 13 份文档 + 5 张图 | `docs/` |
+| Linux CI 回归 | **全绿** — run `43238295802`，3 个 `--strict` 步骤：回归 / 综合 / 门级回放；另有独立的 `formal` job（失败即阻断） | `results/ci_evidence.md`、`.github/workflows/ci.yml` |
+| 有范围的形式证明 | **已完成** — 2 项 k-induction 证明（1 组合 + 1 时序）+ 2 项变异反例 | `results/formal_report.md`、`formal/README.md` |
+| 设计文档 + 面试手册 | 13 份文档 + 形式验证手册 + 5 张图 | `docs/`、`formal/README.md` |
 
 **如实说明**：作者本机的 `iverilog` 安装包被 Windows 安全策略拦截，
 **RTL 仿真与门级回放未在本机执行**（本机快照写 `SKIPPED` 并注明「不权威」）。
 本机真实跑通的是模型、向量、黄金值复核、lint、语法解析，以及**真实的 Yosys 综合**。
 六个 TB、综合与网表回放都在 GitHub Actions（`ubuntu-latest`，Icarus 12.0 +
 Yosys 0.70）执行。三次「先失败后修复」的 CI 记录（scoreboard 协议、展平网表/
-参数覆盖、门级回放耗时）都在 `results/ci_evidence.md`。
+参数覆盖、门级回放耗时）都在 `results/ci_evidence.md`。形式证明在本机真实
+跑通，并在 CI 的独立 job 里复跑。
 
 **不要越界**：generic cell 数不是面积 um²、不是 Fmax、不是功耗；门级回放是
-有限向量集上的功能等价，不是形式等价、不是时序收敛，也不是比赛芯片。
+有限向量集上的功能等价，不是形式等价、不是时序收敛，也不是比赛芯片。形式证明
+只是对本仓库 RTL 的两项有范围性质证明：**不是** RTL 与网表的形式等价、
+**不是** 全芯片验证、**不是** 活性/吞吐证明，也**不是** 覆盖率数字。综合成功
+不等于时序收敛。
 
 ---
 
@@ -112,6 +125,30 @@ dump 的 ACTUAL 列逐点比对）。因为零延迟网表把 32x16 乘法展开
 
 ---
 
+## 形式验证
+
+[`formal/README.md`](formal/README.md) 描述独立的 SymbiYosys 流程，在有限
+回归之外补上两项**有范围的形式证明**，每项都配一个「注入错误」的负向对照，
+用来证明断言确实会失败。
+
+| 任务 | 对象 | 方法 | 结果 |
+|---|---|---|---|
+| `requant_comb` | `requant` 组合输出 | 与独立编写的 51 位参考模型做 k-induction 等价证明，覆盖全部 2^48 组 `(acc, r32)` | PASS |
+| `stream_protocol` | `int8_mac_top` 的 ready/valid 控制 | 6 条安全性质做 k-induction：复位、反压、配置优先级、`m_last` 门控、反压期间输出稳定、无握手时累加器保持 | PASS |
+| `requant_comb_bad` | 删掉舍入偏置 | BMC 负向对照 | FAIL + VCD 反例 |
+| `stream_protocol_bad` | 强制 `s_ready` 恒 1 | BMC 负向对照 | FAIL + VCD 反例 |
+
+运行 `python3 formal/run_formal.py --strict`（或 `make formal`）。CI 执行同一条
+命令：证明失败、变异体意外通过、或反例缺失，都会让 workflow 失败。
+
+**明确边界**：**不是** RTL 与网表的形式等价、**不是** 全芯片验证、**不是**
+活性/吞吐证明、**不是** 覆盖率。时序证明假设复位只在初始时刻有效，并把数据
+通路抽象为常量；流中复位由 `tb_top_stream` 覆盖。门级回放仍是 204 点边界
+子集。工具版本、完整命令、假设与源码哈希见
+[`results/formal_report.md`](results/formal_report.md)。
+
+---
+
 ## 证据地图（30 秒定位任何结论）
 
 | 结论 | 打开这个文件 |
@@ -124,6 +161,8 @@ dump 的 ACTUAL 列逐点比对）。因为零延迟网表把 32x16 乘法展开
 | 舍入偏置讲得清 | `docs/quantization_error_analysis.md` |
 | 设计权衡是有意的 | `docs/design_tradeoffs.md` |
 | 覆盖了哪些场景 | `docs/functional_coverage.md` |
+| 舍入规则对所有输入都成立 | `results/formal_report.md` + `formal/README.md` |
+| 形式断言确实能抓到错误 | CI `formal-evidence` 制品（VCD 反例） |
 | 经得起面试追问 | `docs/interview_qa.md`（42 问） |
 | 没公开不该公开的东西 | `docs/PUBLICATION_AUDIT.md` |
 | 明确没做什么 | `docs/project_limitations.md` |
@@ -139,7 +178,12 @@ python3 run_regress.py --strict          # 6 个 TB + scoreboard（需 iverilog�
 python3 syn/run_synth.py --strict        # 真实 generic-cell 综合
 python3 run_gatelevel.py --strict        # 5 个网表回放（需 iverilog）
 make ci                                 # 等价于上面三步
+make formal                             # SVA + SymbiYosys 证明（需 z3）
 ```
+
+`make formal` 还需要一个 SMT 求解器（Linux：`sudo apt-get install -y z3`）
+以及上面已安装的 `yowasp-yosys`。驱动脚本每次运行都从当前 RTL 现场生成
+`.sby` 配置，不会证明到过期副本；详见 `formal/README.md`。
 
 不需要仿真器的本机检查：
 
@@ -162,6 +206,9 @@ python3 model/check_results.py --verify-vectors --selftest
    `sram_beh.v` 与 `mac_soc_stub.v` 是行为级，**不参与综合**。
 3. 数据集、训练权重、音频：所有激励由 `SEED = 20261112` 确定性生成。
 4. 比赛源码、截图、服务器路径：见 `docs/PUBLICATION_AUDIT.md` 的三色清单。
+5. **没有** RTL 与网表的形式等价，**没有** 全芯片形式验证。形式工作只证明
+   本仓库 RTL 的两项有范围性质，且依赖 `formal/README.md` 列出的假设；
+   门级回放仍是 204 点有限子集，不是等价证明。
 
 ---
 
@@ -182,9 +229,10 @@ python3 model/check_results.py --verify-vectors --selftest
 | `docs/case_study.md` | 比赛团队项目：只写方法与结论 |
 | `docs/resume_project.md` | 简历 3 行版与面试八问 |
 | `docs/PUBLICATION_AUDIT.md` | 逐文件合规清单 |
+| `formal/README.md` | 形式验证范围、假设、限制与运行方法 |
 
 ---
 
 ## 许可证
 
-MIT，见 [LICENSE](LICENSE)。发布前请把版权人改成自己的名字。
+MIT，见 [LICENSE](LICENSE)。版权人刻意保留通用的「Project contributors」，公开仓库不写入个人身份信息。

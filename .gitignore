@@ -22,6 +22,9 @@ __pycache__/
 parser.out
 parsetab.py
 
+# Formal verification run products (regenerated on every run; CI artifact)
+formal/out/
+
 # Local tooling (never part of the portfolio)
 .tools/
 

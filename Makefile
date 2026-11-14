@@ -3,7 +3,7 @@
 
 PY ?= python3
 
-.PHONY: help lint parse vectors check sim regress synth gatelevel full ci clean
+.PHONY: help lint parse vectors check sim regress synth gatelevel formal full ci clean
 
 help:
 	@echo "Targets (python3 + iverilog + yosys; no PDK, no vendor library):"
@@ -18,6 +18,7 @@ help:
 	@echo "  make gatelevel  replay synthesised netlists -> results/gatelevel_report.md"
 	@echo "  make full       regress + synth + gatelevel (the complete evidence chain)"
 	@echo "  make ci         same as full but every step is mandatory (used by CI)"
+	@echo "  make formal     SVA + SymbiYosys proofs and negative mutation tests"
 	@echo "  make clean      remove generated corpora, dumps, logs, netlists and .vvp files"
 
 lint:
@@ -50,6 +51,9 @@ ci:
 	$(PY) run_regress.py --strict
 	$(PY) syn/run_synth.py --strict
 	$(PY) run_gatelevel.py --strict
+
+formal:
+	$(PY) formal/run_formal.py --strict
 
 clean:
 	rm -f build/*.vvp results/dump_*.csv results/tb_*.log

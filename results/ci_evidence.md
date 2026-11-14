@@ -191,3 +191,30 @@ RTL/behavioural evidence only.
 - No power number is claimed here. Any local accelerator-only figure in
   [`docs/case_study.md`](../docs/case_study.md) belongs to the separate team
   project and is not a system power number.
+
+
+---
+
+## 9. Formal job (added 2026-11-14)
+
+A fourth mandatory CI job, `formal`, runs
+`python3 formal/run_formal.py --strict` on `ubuntu-latest`. It installs Z3 and
+the `yowasp-yosys` package, then executes four SymbiYosys jobs:
+
+| Job | Expected | What it proves |
+|---|---|---|
+| `requant_comb` | PASS | k-induction: RTL requant == independent 51-bit reference, unbounded over all 2^48 `(acc,r32)` pairs |
+| `requant_comb_bad` | FAIL + VCD | negative control, rounding bias removed |
+| `stream_protocol` | PASS | k-induction: 6 ready/valid safety properties |
+| `stream_protocol_bad` | FAIL + VCD | negative control, `s_ready` forced high |
+
+A positive proof that fails, a mutation that unexpectedly passes, or a missing
+counterexample makes the job fail. The `formal-evidence` artifact holds the
+generated `.sby` configs, console logs, solver status and VCD counterexamples.
+
+**Boundary:** these proofs concern this repository's RTL only. They are NOT
+RTL-vs-netlist formal equivalence, NOT full-chip verification, NOT liveness and
+NOT a coverage number. The gate-level replay described in sections 1-8 remains
+a finite 204-point boundary subset. Full assumptions, tool versions, commands
+and source hashes: [`formal_report.md`](formal_report.md) and
+[`../formal/README.md`](../formal/README.md).

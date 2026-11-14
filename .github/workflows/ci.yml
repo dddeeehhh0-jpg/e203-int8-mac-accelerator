@@ -46,3 +46,35 @@ jobs:
             syn/out/*_yosys.log
             syn/out/netlist_manifest.csv
           if-no-files-found: warn
+
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install SMT solver and Yosys / SymbiYosys wrappers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends z3
+          python3 -m pip install --quiet "yowasp-yosys==0.70.0.0.post1259"
+          z3 -version
+          python3 -c "import shutil; print('sby:', shutil.which('sby') or shutil.which('yowasp-sby'))"
+
+      - name: Formal proofs and negative mutation tests
+        run: python3 formal/run_formal.py --strict
+
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: formal-evidence
+          path: |
+            formal/out/
+            results/formal_report.md
+          if-no-files-found: warn

@@ -282,3 +282,57 @@ real STA loop, and coverage-driven verification. In that order. None is done.
 commands): `run_regress.py`, `syn/run_synth.py`, `run_gatelevel.py`. Needs
 `iverilog`, `yosys`/`yowasp-yosys`, Python 3. `results/*` and the CI artifacts
 contain the generated evidence. `make help` lists every target.
+
+
+---
+
+## Formal verification (added 2026-11-14)
+
+**Q: Why is a 204-point gate-level replay not enough, and what did you add?**
+It samples a boundary subset; it cannot say anything about untested input
+combinations or about state sequences. I added two scoped SymbiYosys proofs:
+an unbounded combinational equivalence proof for `requant` (all 2^48 input
+pairs) and a k-induction safety proof for the ready/valid FSM. This does NOT
+replace the replay - it answers a different question.
+
+**Q: Why is the formal reference model written differently from the RTL?**
+`requant_check.v` uses a 51-bit wide multiply, an explicit shift and comparison
+branches; the RTL uses a 49-bit intermediate with `sat_hi`/`sat_lo` wires. If I
+had copied the RTL expression, the SAT solver would prove a tautology. The
+different structure and width are what make the equivalence proof meaningful,
+and P6 in the same checker proves the 49-bit width cannot wrap.
+
+**Q: What does k-induction prove, and what does it not prove?**
+Basecase + induction show the asserted safety properties hold for every step
+of the modelled system, not just the first N cycles. It does not prove
+liveness/throughput, does not cover behaviours excluded by the assumptions,
+and does not prove the checker itself is complete.
+
+**Q: Why did you abstract the data path in the sequential proof?**
+A 32x16 multiplier is expensive for an SMT solver. I tied the arithmetic
+operands to constants so Yosys constant-folds them, leaving the control FSM
+for the solver. Numeric correctness is proved separately by the combinational
+proof and the 88,048-point RTL regression. The abstraction is stated in
+`formal/README.md` instead of being hidden.
+
+**Q: How do you know the assertions can actually fail?**
+Each positive job has a mutated twin. The driver verifies the mutation anchor
+matches exactly once, requires the mutated job to FAIL and requires a real VCD
+counterexample. Removing the rounding bias trips the tie-case assertion;
+forcing `s_ready` high trips the priority/backpressure assertions.
+
+**Q: What exactly did the formal work NOT prove?**
+No RTL-vs-netlist formal equivalence (`equiv_make`/`equiv_induct`), no
+full-chip verification, no STA/timing closure, no power/PPA, no code or
+functional coverage percentage, no mid-stream reset behaviour in the proof
+(that is covered by `tb_top_stream`), and no liveness. I say this explicitly
+in the README and in `results/formal_report.md`.
+
+**Q: What did Yosys actually change during synthesis?**
+It lowered behavioural RTL into generic cells (`$_MUL_`, `$add`, `$mux`,
+DFFs), flattened hierarchy and removed unused logic. The gate-level replay
+compiles those generic cells against hand-written zero-delay models. `$paramod`
+hierarchy had to be removed by flattening, and the testbench parameter
+overrides had to be stripped, before the netlist could be replayed by the same
+testbench. None of this is timing closure: there is no SDC, no Liberty and no
+delays.
