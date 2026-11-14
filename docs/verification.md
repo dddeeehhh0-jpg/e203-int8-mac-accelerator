@@ -171,8 +171,11 @@ is excluded: its behavioural SRAM and host FSM are not synthesised.
 - **No coverage percentage.** A functional-corpus count is not code coverage;
   without a commercial coverage tool the honest answer is "not measured".
   `docs/functional_coverage.md` is a scenario checklist only.
-- **No formal proof.** No SVA, no property checking, no formal RTL-vs-netlist
-  equivalence. Gate-level replay is simulation on a finite vector set.
+- **No RTL-vs-netlist formal equivalence and no full-chip formal proof.**
+  The SymbiYosys work in `formal/` proves two scoped RTL properties only; it
+  is not `equiv_make`/`equiv_induct` equivalence, not liveness and not a
+  coverage number. Gate-level replay remains simulation on a finite
+  204-point vector set.
 - **No PDK PPA from this repository.** Generic cell counts are not um^2, Fmax
   or power; there is no STA, no SDC, no timing closure.
 - **No full-chip or silicon verification.** Six testbenches plus a gate-level

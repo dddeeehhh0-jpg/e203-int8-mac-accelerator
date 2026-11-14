@@ -20,8 +20,11 @@ Read this before quoting anything from the repository.
   generic netlist agree on the replayed vector set". It is still NOT accurate
   to say "silicon verified", "full-chip verified", "formally equivalent",
   "timing closed" or "PPA measured".
-- **No code coverage, no formal proof.** `docs/functional_coverage.md` is a
-  scenario checklist; coverage percentages are not reported.
+- **No code coverage number, and only scoped formal proofs.**
+  `docs/functional_coverage.md` is a scenario checklist; coverage percentages
+  are not reported. The two SymbiYosys proofs in `formal/` cover specific RTL
+  properties only (see `results/formal_report.md`) — no RTL-vs-netlist
+  equivalence, no full-chip proof, no liveness.
 - **Gate-level replay uses a reduced vector set.** A zero-delay netlist
   expands the 32x16 multiplier into thousands of gates; replaying all 17,459
   requant vectors exceeded 300 s in CI. The gate sweep is therefore a

@@ -43,8 +43,11 @@ The design comes first; the status index is at the end of this file.
 
 ## Why this design
 
-- **INT8, not FP16** — activations and weights fit in one byte. That halves
-  memory traffic and lets a lane be a single small multiplier. The premise is
+- **INT8, not FP16** — activations and weights fit in one byte. Compared with
+  FP16, INT8 halves the storage size per element, reducing the potential data
+  bandwidth requirement for the same number of elements; actual traffic also
+  depends on the access pattern, caching and data reuse. It also lets a lane be
+  a single small multiplier. The premise is
   that quantisation error stays acceptable, which is why the requantizer is
   the most heavily tested module in this repository.
 - **32-bit accumulator** — with 8 lanes, `|sum| <= 8 * 16384 = 131072 < 2^18`,
@@ -206,7 +209,7 @@ negative control for each so the assertions are known to be able to fail.
 | Job | Object | Method | Result |
 |---|---|---|---|
 | `requant_comb` | `requant` combinational outputs | k-induction against an independently written 51-bit reference, over all 2^48 `(acc, r32)` pairs | PASS |
-| `stream_protocol` | `int8_mac_top` ready/valid FSM | k-induction on 6 safety properties: reset, backpressure, cfg priority, `m_last` gating, stalled-output stability, accumulator hold | PASS |
+| `stream_protocol` | `int8_mac_top` protocol-control logic (abstracted datapath) | k-induction on 6 safety properties: reset, backpressure, cfg priority, `m_last` gating, stalled-output stability, accumulator hold | PASS |
 | `requant_comb_bad` | rounding bias removed | BMC negative control | FAIL + VCD counterexample |
 | `stream_protocol_bad` | `s_ready` forced high | BMC negative control | FAIL + VCD counterexample |
 
@@ -233,7 +236,7 @@ subset. Tool versions, commands, assumptions and source hashes are in
 | "synthesis is real" | [`results/synthesis_report.md`](results/synthesis_report.md) (cell counts, 0 latches, sha256) |
 | "the scoreboard is not a rubber stamp" | `model/check_results.py --selftest` (2 mutation tests) |
 | "the model is bit-exact" | `model/int8_ref.py`, `vectors/gen/manifest.csv` |
-| "the handshake cannot deadlock" | [docs/timing_handshake.md](docs/timing_handshake.md) + `fig4` |
+| "the ready/valid protocol satisfies the checked safety properties" | [`results/formal_report.md`](results/formal_report.md) + [`formal/README.md`](formal/README.md) |
 | "the rounding bias is understood" | [docs/quantization_error_analysis.md](docs/quantization_error_analysis.md) |
 | "the design trade-offs are deliberate" | [docs/design_tradeoffs.md](docs/design_tradeoffs.md) |
 | "which scenarios are covered" | [docs/functional_coverage.md](docs/functional_coverage.md) |

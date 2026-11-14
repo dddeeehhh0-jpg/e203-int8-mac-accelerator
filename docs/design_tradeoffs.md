@@ -92,8 +92,10 @@ optimisation. Quoting them as "area" or deriving Fmax from them would be wrong.
    per clock domain, plus recovery/removal checks. Currently absent.
 2. **Skid buffer / small FIFO** on the output - decouple upstream from a
    stalled consumer instead of freezing the whole channel.
-3. **SVA + formal** on the ready/valid handshake (no deadlock, no duplication,
-   no loss) instead of relying on directed scenarios plus a structural argument.
+3. **Liveness proof and RTL-vs-netlist formal equivalence** on the
+   ready/valid handshake. Scoped SVA safety proofs now exist in `formal/`;
+   deadlock freedom, duplication/loss as liveness claims and
+   `equiv_make`/`equiv_induct` equivalence remain future work.
 4. **Pipeline the requant multiply** and run a real STA loop with an SDC
    (requires a legitimate library - not in this repo).
 5. **CDC** if a second clock domain is ever introduced.

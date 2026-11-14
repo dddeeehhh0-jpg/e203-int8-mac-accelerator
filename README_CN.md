@@ -134,7 +134,7 @@ dump 的 ACTUAL 列逐点比对）。因为零延迟网表把 32x16 乘法展开
 | 任务 | 对象 | 方法 | 结果 |
 |---|---|---|---|
 | `requant_comb` | `requant` 组合输出 | 与独立编写的 51 位参考模型做 k-induction 等价证明，覆盖全部 2^48 组 `(acc, r32)` | PASS |
-| `stream_protocol` | `int8_mac_top` 的 ready/valid 控制 | 6 条安全性质做 k-induction：复位、反压、配置优先级、`m_last` 门控、反压期间输出稳定、无握手时累加器保持 | PASS |
+| `stream_protocol` | `int8_mac_top` 协议控制逻辑（数据通路已抽象） | 6 条安全性质做 k-induction：复位、反压、配置优先级、`m_last` 门控、反压期间输出稳定、无握手时累加器保持 | PASS |
 | `requant_comb_bad` | 删掉舍入偏置 | BMC 负向对照 | FAIL + VCD 反例 |
 | `stream_protocol_bad` | 强制 `s_ready` 恒 1 | BMC 负向对照 | FAIL + VCD 反例 |
 
@@ -157,7 +157,7 @@ dump 的 ACTUAL 列逐点比对）。因为零延迟网表把 32x16 乘法展开
 | 网表与 RTL 一致 | `results/gatelevel_report.md` |
 | 综合是真的 | `results/synthesis_report.md`（cell 数、0 latch、sha256） |
 | scoreboard 不是橡皮图章 | `model/check_results.py --selftest`（2 项变异测试） |
-| 握手不会死锁 | `docs/timing_handshake.md` + `fig4` |
+| ready/valid 协议满足已检查的安全性质 | `results/formal_report.md` + `formal/README.md` |
 | 舍入偏置讲得清 | `docs/quantization_error_analysis.md` |
 | 设计权衡是有意的 | `docs/design_tradeoffs.md` |
 | 覆盖了哪些场景 | `docs/functional_coverage.md` |

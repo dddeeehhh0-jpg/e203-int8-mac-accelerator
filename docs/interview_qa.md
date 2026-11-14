@@ -118,9 +118,12 @@ asserted in every sequential block's sensitivity list. Weakness: **no reset
 de-assertion synchroniser** and no recovery/removal check; a real tapeout needs
 a per-domain reset synchroniser. Also single clock domain, **no CDC**.
 
-**Q18. Do you have formal verification?** No. The no-deadlock argument is
-structural (from the equations) plus directed/random simulation. No SVA, no
-`yosys-smtbmc` proof. Listed as future work.
+**Q18. Do you have formal verification?** Scoped proofs only. SymbiYosys
+(`smtbmc z3`) proves the combinational `requant` contract over all 2^48 input
+pairs and six ready/valid **safety** properties of the protocol-control logic
+with an abstracted datapath. There is **no** liveness / deadlock-freedom
+proof, no RTL-vs-netlist formal equivalence and no full-chip proof. See
+`results/formal_report.md` and `formal/README.md`.
 
 ---
 
@@ -268,15 +271,18 @@ a team-chosen validation set (NOT the organiser's evaluation); and an
 "organiser evaluation passed" or "system power".
 
 **Q40. What's the biggest weakness of this portfolio repo?** No PPA (no PDK),
-no formal verification, no CDC/reset synchronisation, no real coverage tool,
-and no statistical accuracy metric. All are written down in
-`docs/project_limitations.md`. Being explicit about them is the point - a
-project that can state its own boundaries survives follow-up better than one
-that overclaims.
+no RTL-vs-netlist formal equivalence (only two scoped RTL proofs), no
+CDC/reset synchronisation, no real coverage tool, and no statistical accuracy
+metric. All are written down in `docs/project_limitations.md`. Being explicit
+about them is the point - a project that can state its own boundaries survives
+follow-up better than one that overclaims.
 
-**Q41. If you had two more weeks?** Reset synchronisation, an output FIFO/skid
-buffer, SVA/formal on the handshake, pipelining the requant multiply with a
-real STA loop, and coverage-driven verification. In that order. None is done.
+**Q41. If you had two more weeks?** RTL-vs-netlist formal equivalence
+(`equiv_make`/`equiv_induct`), reset synchronisation, an output FIFO/skid
+buffer, a real STA loop with a pipelined requant multiply (needs a Liberty
+library), and coverage-driven verification. In that order. The scoped SVA
+safety proofs and the finite gate-level replay are already done; the rest is
+not.
 
 **Q42. How do I reproduce everything?** `make ci` (or three `--strict`
 commands): `run_regress.py`, `syn/run_synth.py`, `run_gatelevel.py`. Needs
@@ -292,7 +298,8 @@ contain the generated evidence. `make help` lists every target.
 It samples a boundary subset; it cannot say anything about untested input
 combinations or about state sequences. I added two scoped SymbiYosys proofs:
 an unbounded combinational equivalence proof for `requant` (all 2^48 input
-pairs) and a k-induction safety proof for the ready/valid FSM. This does NOT
+pairs) and a k-induction safety proof for the protocol-control logic with an
+abstracted datapath. This does NOT
 replace the replay - it answers a different question.
 
 **Q: Why is the formal reference model written differently from the RTL?**

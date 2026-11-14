@@ -103,10 +103,10 @@ reference. Keep the scope qualifiers attached:
 5. **Why a real `r32` multiplier?** `1 << shamt` only represents powers of two.
    Cost: one multiplier per group, shared by 8 lanes. See the trade-off table
    in `docs/design_tradeoffs.md`.
-6. **How does backpressure work, and can it deadlock?** Fire-on-`ready && valid`,
-   registered output, `valid` never depends combinationally on `ready`;
-   structural no-loop argument and latency/throughput in
-   `docs/timing_handshake.md`.
+6. **How does backpressure work?** Fire-on-`ready && valid`, registered
+   output, `valid` never depends combinationally on `ready`; structural
+   no-loop argument in `docs/timing_handshake.md`, plus six checked safety
+   properties in `formal/`. No liveness / deadlock-freedom proof is claimed.
 7. **How do you keep RTL, model and netlist consistent?** One written integer
    contract; exhaustive Python self-test; deterministic vectors with sha256;
    independent golden recomputation; dumps re-read by a separate scoreboard;

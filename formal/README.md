@@ -19,7 +19,7 @@ see [Scope limits](#scope-limits).
 |---|---|---|---|
 | `requant_comb` | `requant` combinational outputs | `smtbmc z3`, `mode prove` | PASS — k-induction |
 | `requant_comb_bad` | same checker, rounding bias removed | `smtbmc z3`, `mode bmc` | FAIL + VCD counterexample |
-| `stream_protocol` | `int8_mac_top` ready/valid FSM | `smtbmc z3`, `mode prove` | PASS — k-induction |
+| `stream_protocol` | `int8_mac_top` protocol-control logic (abstracted datapath) | `smtbmc z3`, `mode prove` | PASS — k-induction |
 | `stream_protocol_bad` | same checker, `s_ready` forced high | `smtbmc z3`, `mode bmc` | FAIL + VCD counterexample |
 
 `requant_check.v` compares the RTL against an **independently written**

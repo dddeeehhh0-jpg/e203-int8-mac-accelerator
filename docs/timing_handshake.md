@@ -1,9 +1,15 @@
 # Timing, handshaking and backpressure (formal-ish treatment)
 
-This document explains *why* `int8_mac_top` cannot deadlock or lose a result,
-using only the equations actually present in `rtl/top/int8_mac_top.v` and
-`rtl/mac/requant.v`. It is the answer to "walk me through your ready/valid"
-in an interview. A waveform is in `docs/images/fig4_stream_waveform.png`.
+This document explains the ready/valid equations and the structural argument
+behind backpressure, using only the equations actually present in
+`rtl/top/int8_mac_top.v` and `rtl/mac/requant.v`. It is the answer to
+"walk me through your ready/valid" in an interview. A waveform is in
+`docs/images/fig4_stream_waveform.png`.
+
+**Scope note:** the structural argument is not a liveness proof. The formal
+work in `formal/` proves six **safety** properties of the protocol-control
+logic with an abstracted datapath — not deadlock freedom and not
+RTL-vs-netlist equivalence.
 
 > All signals are in ONE clock domain with a single asynchronous active-low
 > reset `rst_n`. There is no CDC and no reset synchroniser. See
@@ -155,9 +161,11 @@ Four annotated regions over 24 beats of `top_seq.hex`:
 - **No reset de-assertion synchroniser**: `rst_n` is async-asserted with no
   reset-release synchronisation. A real design needs a reset synchroniser per
   domain to avoid recovery/removal violations. This is a known simplification.
-- **No formal proof**: the no-deadlock argument above is a structural
-  argument from the equations, plus directed/randomised simulation. There is
-  no assertion-based formal verification (no SVA, no `yosys-smtbmc` proof).
+- **Scoped formal proof only**: `formal/stream_check.v` proves six safety
+  properties (reset, backpressure stability, config priority, `m_last`
+  gating, stalled-output stability, accumulator hold) by k-induction with
+  `smtbmc z3`. Liveness / deadlock freedom, RTL-vs-netlist equivalence and
+  mid-stream reset are **not** proved here; see `formal/README.md`.
 - **No skid-buffer decoupling**: `stall` freezes the entire channel; a
   registered ready/valid skid stage or a small FIFO would let upstream keep
   running one more beat. Chosen for clarity, not for maximum throughput.

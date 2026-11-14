@@ -123,7 +123,10 @@ deliberately excludes `tb_soc_stub` and says so in its report.
 ## 6. What is deliberately NOT covered
 
 - Statement / branch / condition / toggle / FSM coverage (no tool, no number).
-- Formal properties (no SVA, no `smtbmc` proof).
+- Full formal verification. Only the two scoped SymbiYosys proofs in
+  `formal/` exist (combinational `requant` equivalence + six ready/valid
+  safety properties); no RTL-vs-netlist equivalence, no liveness proof, no
+  completeness or coverage claim.
 - CDC, reset de-assertion synchronisation, recovery/removal timing.
 - Timing closure, STA, SDC, corners, parasitics, power intent (UPF/CPF).
 - Real memory macros, real bus fabric, interrupts, DMA.
