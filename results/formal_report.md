@@ -1,6 +1,6 @@
 # Formal verification report (SVA + SymbiYosys)
 
-Generated: 2026-11-14 18:11:53 on Windows-11-10.0.26300-SP0 by `python3 formal/run_formal.py --strict`
+Generated: 2026-11-14 18:17:17 on Windows-11-10.0.26300-SP0 by `python3 formal/run_formal.py --strict`
 
 > This committed file is the author's host snapshot. CI re-runs the same flow on
 > `ubuntu-latest` and uploads its own report, logs and counterexamples as the
@@ -28,10 +28,10 @@ Generated: 2026-11-14 18:11:53 on Windows-11-10.0.26300-SP0 by `python3 formal/r
 
 | Job | Object | Mode | Depth | Expected | Actual | Time | Outcome |
 |---|---|---|---|---|---|---|---|
-| `requant_comb` | `requant_check` | prove | 8 | PASS | PASS | 5.7 s | OK |
-| `requant_comb_bad` | `requant_check` | bmc | 4 | FAIL | FAIL | 5.35 s | OK |
-| `stream_protocol` | `stream_check` | prove | 20 | PASS | PASS | 5.81 s | OK |
-| `stream_protocol_bad` | `stream_check` | bmc | 6 | FAIL | FAIL | 5.37 s | OK |
+| `requant_comb` | `requant_check` | prove | 8 | PASS | PASS | 6.08 s | OK |
+| `requant_comb_bad` | `requant_check` | bmc | 4 | FAIL | FAIL | 5.46 s | OK |
+| `stream_protocol` | `stream_check` | prove | 20 | PASS | PASS | 5.78 s | OK |
+| `stream_protocol_bad` | `stream_check` | bmc | 6 | FAIL | FAIL | 5.47 s | OK |
 
 ## 3. What is proved
 
